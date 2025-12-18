@@ -16,7 +16,7 @@ use core::fmt::Debug;
 pub type Encrypted = bool;
 
 #[allow(clippy::large_enum_variant)]
-pub enum ClientRecord<'config, 'a, CipherSuite>
+pub enum LocalRecord<'config, 'a, CipherSuite>
 where
     // N: ArrayLength<u8>,
     CipherSuite: TlsCipherSuite,
@@ -78,15 +78,15 @@ impl ClientRecordHeader {
     }
 }
 
-impl<'config, CipherSuite> ClientRecord<'config, '_, CipherSuite>
+impl<'config, CipherSuite> LocalRecord<'config, '_, CipherSuite>
 where
     //N: ArrayLength<u8>,
     CipherSuite: TlsCipherSuite,
 {
     pub fn header(&self) -> ClientRecordHeader {
         match self {
-            ClientRecord::Handshake(_, encrypted) => ClientRecordHeader::Handshake(*encrypted),
-            ClientRecord::Alert(_, encrypted) => ClientRecordHeader::Alert(*encrypted),
+            LocalRecord::Handshake(_, encrypted) => ClientRecordHeader::Handshake(*encrypted),
+            LocalRecord::Alert(_, encrypted) => ClientRecordHeader::Alert(*encrypted),
         }
     }
 
@@ -97,14 +97,14 @@ where
     where
         Provider: CryptoProvider,
     {
-        ClientRecord::Handshake(
+        LocalRecord::Handshake(
             ClientHandshake::ClientHello(ClientHello::new(config, provider)),
             false,
         )
     }
 
     pub fn close_notify(opened: bool) -> Self {
-        ClientRecord::Alert(
+        LocalRecord::Alert(
             Alert::new(AlertLevel::Warning, AlertDescription::CloseNotify),
             opened,
         )
@@ -114,8 +114,8 @@ where
         let record_length_marker = buf.len();
 
         match self {
-            ClientRecord::Handshake(handshake, _) => handshake.encode(buf)?,
-            ClientRecord::Alert(alert, _) => alert.encode(buf)?,
+            LocalRecord::Handshake(handshake, _) => handshake.encode(buf)?,
+            LocalRecord::Alert(alert, _) => alert.encode(buf)?,
         };
 
         Ok(buf.len() - record_length_marker)
@@ -128,10 +128,10 @@ where
         write_key_schedule: &mut WriteKeySchedule<CipherSuite>,
     ) -> Result<(), TlsError> {
         match self {
-            ClientRecord::Handshake(handshake, false) => {
+            LocalRecord::Handshake(handshake, false) => {
                 handshake.finalize(buf, transcript, write_key_schedule)
             }
-            ClientRecord::Handshake(_, true) => {
+            LocalRecord::Handshake(_, true) => {
                 ClientHandshake::<CipherSuite>::finalize_encrypted(buf, transcript);
                 Ok(())
             }
@@ -143,7 +143,7 @@ where
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[allow(clippy::large_enum_variant)]
-pub enum ServerRecord<'a, CipherSuite: TlsCipherSuite> {
+pub enum RemoteRecord<'a, CipherSuite: TlsCipherSuite> {
     Handshake(ServerHandshake<'a, CipherSuite>),
     ChangeCipherSpec(ChangeCipherSpec),
     Alert(Alert),
@@ -179,13 +179,13 @@ impl RecordHeader {
     }
 }
 
-impl<'a, CipherSuite: TlsCipherSuite> ServerRecord<'a, CipherSuite> {
+impl<'a, CipherSuite: TlsCipherSuite> RemoteRecord<'a, CipherSuite> {
     pub fn content_type(&self) -> ContentType {
         match self {
-            ServerRecord::Handshake(_) => ContentType::Handshake,
-            ServerRecord::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
-            ServerRecord::Alert(_) => ContentType::Alert,
-            ServerRecord::ApplicationData(_) => ContentType::ApplicationData,
+            RemoteRecord::Handshake(_) => ContentType::Handshake,
+            RemoteRecord::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
+            RemoteRecord::Alert(_) => ContentType::Alert,
+            RemoteRecord::ApplicationData(_) => ContentType::ApplicationData,
         }
     }
 
@@ -193,27 +193,27 @@ impl<'a, CipherSuite: TlsCipherSuite> ServerRecord<'a, CipherSuite> {
         header: RecordHeader,
         data: &'a mut [u8],
         digest: &mut CipherSuite::Hash,
-    ) -> Result<ServerRecord<'a, CipherSuite>, TlsError> {
+    ) -> Result<RemoteRecord<'a, CipherSuite>, TlsError> {
         assert_eq!(header.content_length(), data.len());
         match header.content_type() {
             ContentType::Invalid => Err(TlsError::Unimplemented),
-            ContentType::ChangeCipherSpec => Ok(ServerRecord::ChangeCipherSpec(
+            ContentType::ChangeCipherSpec => Ok(RemoteRecord::ChangeCipherSpec(
                 ChangeCipherSpec::read(data)?,
             )),
             ContentType::Alert => {
                 let mut parse = ParseBuffer::new(data);
                 let alert = Alert::parse(&mut parse)?;
-                Ok(ServerRecord::Alert(alert))
+                Ok(RemoteRecord::Alert(alert))
             }
             ContentType::Handshake => {
                 let mut parse = ParseBuffer::new(data);
-                Ok(ServerRecord::Handshake(ServerHandshake::read(
+                Ok(RemoteRecord::Handshake(ServerHandshake::read(
                     &mut parse, digest,
                 )?))
             }
             ContentType::ApplicationData => {
                 let buf = CryptoBuffer::wrap_with_pos(data, data.len());
-                Ok(ServerRecord::ApplicationData(ApplicationData::new(
+                Ok(RemoteRecord::ApplicationData(ApplicationData::new(
                     buf, header,
                 )))
             }

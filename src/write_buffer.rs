@@ -4,7 +4,7 @@ use crate::{
     config::{TLS_RECORD_OVERHEAD, TlsCipherSuite},
     connection::encrypt,
     key_schedule::{ReadKeySchedule, WriteKeySchedule},
-    record::{ClientRecord, ClientRecordHeader},
+    record::{LocalRecord, ClientRecordHeader},
 };
 
 pub struct WriteBuffer<'a> {
@@ -91,7 +91,7 @@ impl<'a> WriteBuffer<'a> {
 
     pub fn write_record<CipherSuite>(
         &mut self,
-        record: &ClientRecord<CipherSuite>,
+        record: &LocalRecord<CipherSuite>,
         write_key_schedule: &mut WriteKeySchedule<CipherSuite>,
         read_key_schedule: Option<&mut ReadKeySchedule<CipherSuite>>,
     ) -> Result<&[u8], TlsError>
@@ -260,7 +260,7 @@ fn write_record<'a, CipherSuite>(
     buffer: &'a mut [u8],
     pos: &mut usize,
     current_header: &mut Option<ClientRecordHeader>,
-    record: &ClientRecord<CipherSuite>,
+    record: &LocalRecord<CipherSuite>,
     write_key_schedule: &mut WriteKeySchedule<CipherSuite>,
     read_key_schedule: Option<&mut ReadKeySchedule<CipherSuite>>,
 ) -> Result<&'a [u8], TlsError>

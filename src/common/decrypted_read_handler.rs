@@ -2,7 +2,7 @@ use core::ops::Range;
 
 use crate::{
     TlsError, alert::AlertDescription, common::decrypted_buffer_info::DecryptedBufferInfo,
-    config::TlsCipherSuite, handshake::ServerHandshake, record::ServerRecord,
+    config::TlsCipherSuite, handshake::ServerHandshake, record::RemoteRecord,
 };
 
 pub struct DecryptedReadHandler<'a> {
@@ -14,10 +14,10 @@ pub struct DecryptedReadHandler<'a> {
 impl DecryptedReadHandler<'_> {
     pub fn handle<CipherSuite: TlsCipherSuite>(
         &mut self,
-        record: ServerRecord<'_, CipherSuite>,
+        record: RemoteRecord<'_, CipherSuite>,
     ) -> Result<(), TlsError> {
         match record {
-            ServerRecord::ApplicationData(data) => {
+            RemoteRecord::ApplicationData(data) => {
                 let slice = data.data.as_slice();
                 let slice_ptrs = slice.as_ptr_range();
 
@@ -41,7 +41,7 @@ impl DecryptedReadHandler<'_> {
                 self.buffer_info.consumed = 0;
                 Ok(())
             }
-            ServerRecord::Alert(alert) => {
+            RemoteRecord::Alert(alert) => {
                 if let AlertDescription::CloseNotify = alert.description {
                     *self.is_open = false;
                     Err(TlsError::ConnectionClosed)
@@ -49,14 +49,14 @@ impl DecryptedReadHandler<'_> {
                     Err(TlsError::InternalError)
                 }
             }
-            ServerRecord::ChangeCipherSpec(_) => Err(TlsError::InternalError),
-            ServerRecord::Handshake(ServerHandshake::NewSessionTicket(_)) => {
+            RemoteRecord::ChangeCipherSpec(_) => Err(TlsError::InternalError),
+            RemoteRecord::Handshake(ServerHandshake::NewSessionTicket(_)) => {
                 // TODO: we should validate extensions and abort. We can do this automatically
                 // as long as the connection is unsplit, however, split connections must be aborted
                 // by the user.
                 Ok(())
             }
-            ServerRecord::Handshake(_) => {
+            RemoteRecord::Handshake(_) => {
                 unimplemented!()
             }
         }

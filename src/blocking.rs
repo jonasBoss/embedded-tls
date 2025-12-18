@@ -7,7 +7,7 @@ use crate::flush_policy::FlushPolicy;
 use crate::key_schedule::KeySchedule;
 use crate::key_schedule::{ReadKeySchedule, WriteKeySchedule};
 use crate::read_buffer::ReadBuffer;
-use crate::record::{ClientRecord, ClientRecordHeader};
+use crate::record::{ClientRecordHeader, LocalRecord};
 use crate::record_reader::{RecordReader, RecordReaderBorrowMut};
 use crate::write_buffer::{WriteBuffer, WriteBufferBorrowMut};
 use embedded_io::Error as _;
@@ -236,7 +236,7 @@ where
         let is_opened = self.is_opened();
         let (write_key_schedule, read_key_schedule) = self.key_schedule.as_split();
         let slice = self.record_write_buf.write_record(
-            &ClientRecord::close_notify(is_opened),
+            &LocalRecord::close_notify(is_opened),
             write_key_schedule,
             Some(read_key_schedule),
         )?;

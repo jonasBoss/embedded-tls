@@ -5,7 +5,7 @@ use embedded_io_async::Read as AsyncRead;
 use crate::{
     TlsError,
     config::TlsCipherSuite,
-    record::{RecordHeader, ServerRecord},
+    record::{RecordHeader, RemoteRecord},
 };
 
 pub struct RecordReader<'a> {
@@ -48,7 +48,7 @@ impl<'a> RecordReader<'a> {
         &'m mut self,
         transport: &mut impl AsyncRead,
         key_schedule: &mut ReadKeySchedule<CipherSuite>,
-    ) -> Result<ServerRecord<'m, CipherSuite>, TlsError> {
+    ) -> Result<RemoteRecord<'m, CipherSuite>, TlsError> {
         read(
             self.buf,
             &mut self.decoded,
@@ -63,7 +63,7 @@ impl<'a> RecordReader<'a> {
         &'m mut self,
         transport: &mut impl BlockingRead,
         key_schedule: &mut ReadKeySchedule<CipherSuite>,
-    ) -> Result<ServerRecord<'m, CipherSuite>, TlsError> {
+    ) -> Result<RemoteRecord<'m, CipherSuite>, TlsError> {
         read_blocking(
             self.buf,
             &mut self.decoded,
@@ -79,7 +79,7 @@ impl RecordReaderBorrowMut<'_> {
         &'m mut self,
         transport: &mut impl AsyncRead,
         key_schedule: &mut ReadKeySchedule<CipherSuite>,
-    ) -> Result<ServerRecord<'m, CipherSuite>, TlsError> {
+    ) -> Result<RemoteRecord<'m, CipherSuite>, TlsError> {
         read(
             self.buf,
             self.decoded,
@@ -94,7 +94,7 @@ impl RecordReaderBorrowMut<'_> {
         &'m mut self,
         transport: &mut impl BlockingRead,
         key_schedule: &mut ReadKeySchedule<CipherSuite>,
-    ) -> Result<ServerRecord<'m, CipherSuite>, TlsError> {
+    ) -> Result<RemoteRecord<'m, CipherSuite>, TlsError> {
         read_blocking(
             self.buf,
             self.decoded,
@@ -111,7 +111,7 @@ pub async fn read<'m, CipherSuite: TlsCipherSuite>(
     pending: &mut usize,
     transport: &mut impl AsyncRead,
     key_schedule: &mut ReadKeySchedule<CipherSuite>,
-) -> Result<ServerRecord<'m, CipherSuite>, TlsError> {
+) -> Result<RemoteRecord<'m, CipherSuite>, TlsError> {
     let header: RecordHeader = next_record_header(transport).await?;
 
     advance(buf, decoded, pending, transport, header.content_length()).await?;
@@ -130,7 +130,7 @@ pub fn read_blocking<'m, CipherSuite: TlsCipherSuite>(
     pending: &mut usize,
     transport: &mut impl BlockingRead,
     key_schedule: &mut ReadKeySchedule<CipherSuite>,
-) -> Result<ServerRecord<'m, CipherSuite>, TlsError> {
+) -> Result<RemoteRecord<'m, CipherSuite>, TlsError> {
     let header: RecordHeader = next_record_header_blocking(transport)?;
 
     advance_blocking(buf, decoded, pending, transport, header.content_length())?;
@@ -231,7 +231,7 @@ fn consume<'m, CipherSuite: TlsCipherSuite>(
     pending: &mut usize,
     header: RecordHeader,
     digest: &mut CipherSuite::Hash,
-) -> Result<ServerRecord<'m, CipherSuite>, TlsError> {
+) -> Result<RemoteRecord<'m, CipherSuite>, TlsError> {
     let content_len = header.content_length();
 
     let slice = &mut buf[*decoded..][..content_len];
@@ -239,7 +239,7 @@ fn consume<'m, CipherSuite: TlsCipherSuite>(
     *decoded += content_len;
     *pending -= content_len;
 
-    ServerRecord::decode(header, slice, digest)
+    RemoteRecord::decode(header, slice, digest)
 }
 
 fn ensure_contiguous(
@@ -339,7 +339,7 @@ mod tests {
         let mut key_schedule = KeySchedule::<Aes128GcmSha256>::new();
 
         {
-            if let ServerRecord::ApplicationData(data) = reader
+            if let RemoteRecord::ApplicationData(data) = reader
                 .read_blocking(&mut transport, key_schedule.read_state())
                 .unwrap()
             {
@@ -353,7 +353,7 @@ mod tests {
         }
 
         {
-            if let ServerRecord::ApplicationData(data) = reader
+            if let RemoteRecord::ApplicationData(data) = reader
                 .read_blocking(&mut transport, key_schedule.read_state())
                 .unwrap()
             {
@@ -398,7 +398,7 @@ mod tests {
         let mut key_schedule = KeySchedule::<Aes128GcmSha256>::new();
 
         {
-            if let ServerRecord::ApplicationData(data) = reader
+            if let RemoteRecord::ApplicationData(data) = reader
                 .read_blocking(&mut transport, key_schedule.read_state())
                 .unwrap()
             {
@@ -412,7 +412,7 @@ mod tests {
         }
 
         {
-            if let ServerRecord::ApplicationData(data) = reader
+            if let RemoteRecord::ApplicationData(data) = reader
                 .read_blocking(&mut transport, key_schedule.read_state())
                 .unwrap()
             {
@@ -449,7 +449,7 @@ mod tests {
         let mut key_schedule = KeySchedule::<Aes128GcmSha256>::new();
 
         {
-            if let ServerRecord::ApplicationData(data) = reader
+            if let RemoteRecord::ApplicationData(data) = reader
                 .read_blocking(&mut transport, key_schedule.read_state())
                 .unwrap()
             {
@@ -463,7 +463,7 @@ mod tests {
         }
 
         {
-            if let ServerRecord::ApplicationData(data) = reader
+            if let RemoteRecord::ApplicationData(data) = reader
                 .read_blocking(&mut transport, key_schedule.read_state())
                 .unwrap()
             {

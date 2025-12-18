@@ -1,7 +1,7 @@
 use crate::config::{TlsCipherSuite, TlsConfig};
 use crate::handshake::{ClientHandshake, ServerHandshake};
 use crate::key_schedule::{KeySchedule, ReadKeySchedule, WriteKeySchedule};
-use crate::record::{ClientRecord, ServerRecord};
+use crate::record::{LocalRecord, RemoteRecord};
 use crate::record_reader::RecordReader;
 use crate::write_buffer::WriteBuffer;
 use crate::{CertificateVerify, CryptoProvider, TlsError, TlsVerifier};
@@ -27,16 +27,16 @@ use aes_gcm::aead::{AeadCore, AeadInPlace, KeyInit};
 
 pub(crate) fn decrypt_record<CipherSuite>(
     key_schedule: &mut ReadKeySchedule<CipherSuite>,
-    record: ServerRecord<'_, CipherSuite>,
+    record: RemoteRecord<'_, CipherSuite>,
     mut cb: impl FnMut(
         &mut ReadKeySchedule<CipherSuite>,
-        ServerRecord<'_, CipherSuite>,
+        RemoteRecord<'_, CipherSuite>,
     ) -> Result<(), TlsError>,
 ) -> Result<(), TlsError>
 where
     CipherSuite: TlsCipherSuite,
 {
-    if let ServerRecord::ApplicationData(ApplicationData {
+    if let RemoteRecord::ApplicationData(ApplicationData {
         header,
         data: mut app_data,
     }) = record
@@ -72,16 +72,16 @@ where
                 // Decode potentially coalesced handshake messages
                 while buf.remaining() > 0 {
                     let inner = ServerHandshake::read(&mut buf, key_schedule.transcript_hash())?;
-                    cb(key_schedule, ServerRecord::Handshake(inner))?;
+                    cb(key_schedule, RemoteRecord::Handshake(inner))?;
                 }
             }
             ContentType::ApplicationData => {
                 let inner = ApplicationData::new(app_data, header);
-                cb(key_schedule, ServerRecord::ApplicationData(inner))?;
+                cb(key_schedule, RemoteRecord::ApplicationData(inner))?;
             }
             ContentType::Alert => {
                 let alert = Alert::parse(&mut buf)?;
-                cb(key_schedule, ServerRecord::Alert(alert))?;
+                cb(key_schedule, RemoteRecord::Alert(alert))?;
             }
             _ => return Err(TlsError::Unimplemented),
         }
@@ -379,7 +379,7 @@ where
     if let Err(TlsError::AbortHandshake(level, description)) = result {
         let (write_key_schedule, read_key_schedule) = key_schedule.as_split();
         let tx = tx_buf.write_record(
-            &ClientRecord::Alert(Alert { level, description }, false),
+            &LocalRecord::Alert(Alert { level, description }, false),
             write_key_schedule,
             Some(read_key_schedule),
         )?;
@@ -421,7 +421,7 @@ where
     if let Err(TlsError::AbortHandshake(level, description)) = result {
         let (write_key_schedule, read_key_schedule) = key_schedule.as_split();
         let tx = tx_buf.write_record(
-            &ClientRecord::Alert(Alert { level, description }, false),
+            &LocalRecord::Alert(Alert { level, description }, false),
             write_key_schedule,
             Some(read_key_schedule),
         )?;
@@ -467,10 +467,10 @@ where
 {
     key_schedule.initialize_early_secret(config.psk.as_ref().map(|p| p.0))?;
     let (write_key_schedule, read_key_schedule) = key_schedule.as_split();
-    let client_hello = ClientRecord::client_hello(config, crypto_provider);
+    let client_hello = LocalRecord::client_hello(config, crypto_provider);
     let slice = tx_buf.write_record(&client_hello, write_key_schedule, Some(read_key_schedule))?;
 
-    if let ClientRecord::Handshake(ClientHandshake::ClientHello(client_hello), _) = client_hello {
+    if let LocalRecord::Handshake(ClientHandshake::ClientHello(client_hello), _) = client_hello {
         handshake.secret.replace(client_hello.secret);
         Ok((State::ServerHello, slice))
     } else {
@@ -481,20 +481,20 @@ where
 fn process_client_hello<CipherSuite>(
     handshake: &mut Handshake<CipherSuite>,
     _key_schedule: &mut KeySchedule<CipherSuite>,
-    record: ServerRecord<'_, CipherSuite>,
+    record: RemoteRecord<'_, CipherSuite>,
 ) -> Result<State, TlsError>
 where
     CipherSuite: TlsCipherSuite,
 {
     match record {
-        ServerRecord::Handshake(ServerHandshake::ServerHello(_server_hello)) => {
+        RemoteRecord::Handshake(ServerHandshake::ServerHello(_server_hello)) => {
             // TODO: this is the wrong handshake
             trace!("********* ClientHello");
             let _secret = handshake.secret.take().ok_or(TlsError::InvalidHandshake)?;
             let _shared = todo!("calculate shared secret. see process_server_hello()");
         }
-        ServerRecord::Handshake(_) => Err(TlsError::InvalidHandshake),
-        ServerRecord::Alert(alert) => {
+        RemoteRecord::Handshake(_) => Err(TlsError::InvalidHandshake),
+        RemoteRecord::Alert(alert) => {
             Err(TlsError::HandshakeAborted(alert.level, alert.description))
         }
         _ => Err(TlsError::InvalidRecord),
@@ -504,13 +504,13 @@ where
 fn process_server_hello<CipherSuite>(
     handshake: &mut Handshake<CipherSuite>,
     key_schedule: &mut KeySchedule<CipherSuite>,
-    record: ServerRecord<'_, CipherSuite>,
+    record: RemoteRecord<'_, CipherSuite>,
 ) -> Result<State, TlsError>
 where
     CipherSuite: TlsCipherSuite,
 {
     match record {
-        ServerRecord::Handshake(server_handshake) => match server_handshake {
+        RemoteRecord::Handshake(server_handshake) => match server_handshake {
             ServerHandshake::ServerHello(server_hello) => {
                 trace!("********* ServerHello");
                 let secret = handshake.secret.take().ok_or(TlsError::InvalidHandshake)?;
@@ -522,7 +522,7 @@ where
             }
             _ => Err(TlsError::InvalidHandshake),
         },
-        ServerRecord::Alert(alert) => {
+        RemoteRecord::Alert(alert) => {
             Err(TlsError::HandshakeAborted(alert.level, alert.description))
         }
         _ => Err(TlsError::InvalidRecord),
@@ -534,7 +534,7 @@ fn process_server_verify<Provider>(
     key_schedule: &mut KeySchedule<Provider::CipherSuite>,
     config: &TlsConfig<'_>,
     crypto_provider: &mut Provider,
-    record: ServerRecord<'_, Provider::CipherSuite>,
+    record: RemoteRecord<'_, Provider::CipherSuite>,
 ) -> Result<State, TlsError>
 where
     Provider: CryptoProvider,
@@ -542,7 +542,7 @@ where
     let mut state = State::ServerVerify;
     decrypt_record(key_schedule.read_state(), record, |key_schedule, record| {
         match record {
-            ServerRecord::Handshake(server_handshake) => {
+            RemoteRecord::Handshake(server_handshake) => {
                 match server_handshake {
                     ServerHandshake::EncryptedExtensions(_) => {}
                     ServerHandshake::Certificate(certificate) => {
@@ -584,7 +584,7 @@ where
                     _ => return Err(TlsError::InvalidHandshake),
                 }
             }
-            ServerRecord::ChangeCipherSpec(_) => {}
+            RemoteRecord::ChangeCipherSpec(_) => {}
             _ => return Err(TlsError::InvalidRecord),
         }
 
@@ -623,7 +623,7 @@ where
 
     buffer
         .write_record(
-            &ClientRecord::Handshake(ClientHandshake::ClientCert(certificate), true),
+            &LocalRecord::Handshake(ClientHandshake::ClientCert(certificate), true),
             write_key_schedule,
             Some(read_key_schedule),
         )
@@ -665,17 +665,14 @@ where
 
             (
                 Ok(State::ClientFinished),
-                ClientRecord::Handshake(
-                    ClientHandshake::ClientCertVerify(certificate_verify),
-                    true,
-                ),
+                LocalRecord::Handshake(ClientHandshake::ClientCertVerify(certificate_verify), true),
             )
         }
         Err(e) => {
             error!("Failed to obtain signing key: {:?}", e);
             (
                 Err(e),
-                ClientRecord::Alert(
+                LocalRecord::Alert(
                     Alert::new(AlertLevel::Warning, AlertDescription::CloseNotify),
                     true,
                 ),
@@ -704,7 +701,7 @@ where
     let (write_key_schedule, read_key_schedule) = key_schedule.as_split();
 
     buffer.write_record(
-        &ClientRecord::Handshake(ClientHandshake::Finished(client_finished), true),
+        &LocalRecord::Handshake(ClientHandshake::Finished(client_finished), true),
         write_key_schedule,
         Some(read_key_schedule),
     )
