@@ -99,6 +99,10 @@ where
     where
         Provider: CryptoProvider<CipherSuite = CipherSuite>,
     {
+        #[cfg(feature = "server")]
+        if context.config.is_server {
+            return self.open_server(context).await;
+        }
         let mut handshake: Handshake<CipherSuite> = Handshake::new();
         if let (Ok(verifier), Some(server_name)) = (
             context.crypto_provider.verifier(),
@@ -111,6 +115,37 @@ where
         while state != State::ApplicationData {
             let next_state = state
                 .process(
+                    &mut self.delegate,
+                    &mut handshake,
+                    &mut self.record_reader,
+                    &mut self.record_write_buf,
+                    &mut self.key_schedule,
+                    context.config,
+                    &mut context.crypto_provider,
+                )
+                .await?;
+            trace!("State {:?} -> {:?}", state, next_state);
+            state = next_state;
+        }
+        *self.opened.get_mut() = true;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "server")]
+    async fn open_server<Provider>(
+        &mut self,
+        mut context: TlsContext<'_, Provider>,
+    ) -> Result<(), TlsError>
+    where
+        Provider: CryptoProvider<CipherSuite = CipherSuite>,
+    {
+        let mut handshake: Handshake<CipherSuite> = Handshake::new();
+        let mut state = State::ClientHello;
+
+        while state != State::ApplicationData {
+            let next_state = state
+                .process_server(
                     &mut self.delegate,
                     &mut handshake,
                     &mut self.record_reader,

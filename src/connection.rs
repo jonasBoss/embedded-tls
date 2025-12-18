@@ -232,6 +232,75 @@ impl<'a> State {
         }
     }
 
+    #[cfg(feature = "server")]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn process_server<'v, Transport, Provider>(
+        self,
+        transport: &mut Transport,
+        handshake: &mut Handshake<Provider::CipherSuite>,
+        record_reader: &mut RecordReader<'_>,
+        tx_buf: &mut WriteBuffer<'_>,
+        key_schedule: &mut KeySchedule<Provider::CipherSuite>,
+        config: &TlsConfig<'a>,
+        crypto_provider: &mut Provider,
+    ) -> Result<State, TlsError>
+    where
+        Transport: AsyncRead + AsyncWrite + 'a,
+        Provider: CryptoProvider,
+    {
+        match self {
+            State::ClientHello => {
+                let record = record_reader
+                    .read(transport, key_schedule.read_state())
+                    .await?;
+                let _result = process_client_hello(handshake, key_schedule, record);
+                todo!("handle processing error")
+            }
+            State::ServerHello => {
+                let record = record_reader
+                    .read(transport, key_schedule.read_state())
+                    .await?;
+
+                let result = process_server_hello(handshake, key_schedule, record);
+
+                handle_processing_error(result, transport, key_schedule, tx_buf).await
+            }
+            State::ServerVerify => {
+                let record = record_reader
+                    .read(transport, key_schedule.read_state())
+                    .await?;
+
+                let result =
+                    process_server_verify(handshake, key_schedule, config, crypto_provider, record);
+
+                handle_processing_error(result, transport, key_schedule, tx_buf).await
+            }
+            State::ClientCert => {
+                let (state, tx) = client_cert(handshake, key_schedule, config, tx_buf)?;
+
+                respond(tx, transport, key_schedule).await?;
+
+                Ok(state)
+            }
+            State::ClientCertVerify => {
+                let (result, tx) =
+                    client_cert_verify(key_schedule, config, crypto_provider, tx_buf)?;
+
+                respond(tx, transport, key_schedule).await?;
+
+                result
+            }
+            State::ClientFinished => {
+                let tx = client_finished(key_schedule, tx_buf)?;
+
+                respond(tx, transport, key_schedule).await?;
+
+                client_finished_finalize(key_schedule, handshake)
+            }
+            State::ApplicationData => Ok(State::ApplicationData),
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn process_blocking<'v, Transport, Provider>(
         self,
@@ -406,6 +475,29 @@ where
         Ok((State::ServerHello, slice))
     } else {
         Err(TlsError::EncodeError)
+    }
+}
+
+fn process_client_hello<CipherSuite>(
+    handshake: &mut Handshake<CipherSuite>,
+    _key_schedule: &mut KeySchedule<CipherSuite>,
+    record: ServerRecord<'_, CipherSuite>,
+) -> Result<State, TlsError>
+where
+    CipherSuite: TlsCipherSuite,
+{
+    match record {
+        ServerRecord::Handshake(ServerHandshake::ServerHello(_server_hello)) => {
+            // TODO: this is the wrong handshake
+            trace!("********* ClientHello");
+            let _secret = handshake.secret.take().ok_or(TlsError::InvalidHandshake)?;
+            let _shared = todo!("calculate shared secret. see process_server_hello()");
+        }
+        ServerRecord::Handshake(_) => Err(TlsError::InvalidHandshake),
+        ServerRecord::Alert(alert) => {
+            Err(TlsError::HandshakeAborted(alert.level, alert.description))
+        }
+        _ => Err(TlsError::InvalidRecord),
     }
 }
 
