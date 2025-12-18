@@ -11,12 +11,12 @@ use p256::ecdh::{EphemeralSecret, SharedSecret};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct ServerHello<'a> {
+pub struct RemoteServerHello<'a> {
     extensions: Vec<ServerHelloExtension<'a>, 4>,
 }
 
-impl<'a> ServerHello<'a> {
-    pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<ServerHello<'a>, TlsError> {
+impl<'a> RemoteServerHello<'a> {
+    pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<RemoteServerHello<'a>, TlsError> {
         //let mut buf = ParseBuffer::new(&buf[0..content_length]);
         //let mut buf = ParseBuffer::new(&buf);
 

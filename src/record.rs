@@ -3,7 +3,7 @@ use crate::application_data::ApplicationData;
 use crate::change_cipher_spec::ChangeCipherSpec;
 use crate::config::{TlsCipherSuite, TlsConfig};
 use crate::content_types::ContentType;
-use crate::handshake::client_hello::ClientHello;
+use crate::handshake::local_hello::ClientHello;
 use crate::handshake::{LocalHandshake, RemoteHandshake};
 use crate::key_schedule::WriteKeySchedule;
 use crate::{CryptoProvider, buffer::CryptoBuffer};

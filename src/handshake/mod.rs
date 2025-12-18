@@ -4,11 +4,11 @@ use crate::config::TlsCipherSuite;
 use crate::handshake::certificate::CertificateRef;
 use crate::handshake::certificate_request::CertificateRequestRef;
 use crate::handshake::certificate_verify::{CertificateVerify, CertificateVerifyRef};
-use crate::handshake::client_hello::ClientHello;
 use crate::handshake::encrypted_extensions::EncryptedExtensions;
 use crate::handshake::finished::Finished;
+use crate::handshake::local_hello::ClientHello;
 use crate::handshake::new_session_ticket::NewSessionTicket;
-use crate::handshake::server_hello::ServerHello;
+use crate::handshake::remote_hello::RemoteServerHello;
 use crate::key_schedule::HashOutputSize;
 use crate::parse_buffer::{ParseBuffer, ParseError};
 use crate::{buffer::CryptoBuffer, key_schedule::WriteKeySchedule};
@@ -19,11 +19,11 @@ pub mod binder;
 pub mod certificate;
 pub mod certificate_request;
 pub mod certificate_verify;
-pub mod client_hello;
 pub mod encrypted_extensions;
 pub mod finished;
+pub mod local_hello;
 pub mod new_session_ticket;
-pub mod server_hello;
+pub mod remote_hello;
 
 const LEGACY_VERSION: u16 = 0x0303;
 
@@ -128,7 +128,7 @@ where
 
 #[allow(clippy::large_enum_variant)]
 pub enum RemoteHandshake<'a, CipherSuite: TlsCipherSuite> {
-    ServerHello(ServerHello<'a>),
+    ServerHello(RemoteServerHello<'a>),
     EncryptedExtensions(EncryptedExtensions<'a>),
     NewSessionTicket(NewSessionTicket<'a>),
     Certificate(CertificateRef<'a>),
@@ -208,7 +208,9 @@ impl<'a, CipherSuite: TlsCipherSuite> RemoteHandshake<'a, CipherSuite> {
 
         let handshake = match handshake_type {
             //HandshakeType::ClientHello => {}
-            HandshakeType::ServerHello => RemoteHandshake::ServerHello(ServerHello::parse(buf)?),
+            HandshakeType::ServerHello => {
+                RemoteHandshake::ServerHello(RemoteServerHello::parse(buf)?)
+            }
             HandshakeType::NewSessionTicket => {
                 RemoteHandshake::NewSessionTicket(NewSessionTicket::parse(buf)?)
             }
