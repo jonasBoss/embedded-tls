@@ -130,6 +130,8 @@ pub struct TlsConfig<'a> {
     pub(crate) ca: Option<Certificate<'a>>,
     pub(crate) cert: Option<Certificate<'a>>,
     pub(crate) priv_key: &'a [u8],
+    #[cfg(feature = "server")]
+    pub(crate) is_server: bool,
 }
 
 pub trait TlsClock {
@@ -267,6 +269,8 @@ impl<'a> TlsConfig<'a> {
             ca: None,
             cert: None,
             priv_key: &[],
+            #[cfg(feature = "server")]
+            is_server: false,
         };
 
         if cfg!(feature = "alloc") {
@@ -290,6 +294,13 @@ impl<'a> TlsConfig<'a> {
         unwrap!(config.named_groups.push(NamedGroup::Secp256r1));
 
         config
+    }
+
+    #[cfg(feature = "server")]
+    pub fn new_server(cert: Certificate<'a>, priv_key: &'a [u8]) -> Self {
+        let mut this = Self::new().with_cert(cert).with_priv_key(priv_key);
+        this.is_server = true;
+        this
     }
 
     /// Enable RSA ciphers even if they might not be supported.

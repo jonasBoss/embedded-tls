@@ -51,8 +51,7 @@ async fn test_google() {
     let stream = TcpStream::connect("google.com:443")
         .await
         .expect("error connecting to server");
-
-    log::info!("Connected");
+    log::info!("Connected to {:?}", stream.peer_addr());
     let mut read_record_buffer = [0; 16384];
     let mut write_record_buffer = [0; 16384];
     let config = TlsConfig::new().with_server_name("google.com");
