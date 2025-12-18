@@ -4,7 +4,7 @@ use crate::change_cipher_spec::ChangeCipherSpec;
 use crate::config::{TlsCipherSuite, TlsConfig};
 use crate::content_types::ContentType;
 use crate::handshake::client_hello::ClientHello;
-use crate::handshake::{ClientHandshake, ServerHandshake};
+use crate::handshake::{LocalHandshake, RemoteHandshake};
 use crate::key_schedule::WriteKeySchedule;
 use crate::{CryptoProvider, buffer::CryptoBuffer};
 use crate::{
@@ -21,7 +21,7 @@ where
     // N: ArrayLength<u8>,
     CipherSuite: TlsCipherSuite,
 {
-    Handshake(ClientHandshake<'config, 'a, CipherSuite>, Encrypted),
+    Handshake(LocalHandshake<'config, 'a, CipherSuite>, Encrypted),
     Alert(Alert, Encrypted),
 }
 
@@ -98,7 +98,7 @@ where
         Provider: CryptoProvider,
     {
         LocalRecord::Handshake(
-            ClientHandshake::ClientHello(ClientHello::new(config, provider)),
+            LocalHandshake::ClientHello(ClientHello::new(config, provider)),
             false,
         )
     }
@@ -132,7 +132,7 @@ where
                 handshake.finalize(buf, transcript, write_key_schedule)
             }
             LocalRecord::Handshake(_, true) => {
-                ClientHandshake::<CipherSuite>::finalize_encrypted(buf, transcript);
+                LocalHandshake::<CipherSuite>::finalize_encrypted(buf, transcript);
                 Ok(())
             }
             _ => Ok(()),
@@ -144,7 +144,7 @@ where
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[allow(clippy::large_enum_variant)]
 pub enum RemoteRecord<'a, CipherSuite: TlsCipherSuite> {
-    Handshake(ServerHandshake<'a, CipherSuite>),
+    Handshake(RemoteHandshake<'a, CipherSuite>),
     ChangeCipherSpec(ChangeCipherSpec),
     Alert(Alert),
     ApplicationData(ApplicationData<'a>),
@@ -207,7 +207,7 @@ impl<'a, CipherSuite: TlsCipherSuite> RemoteRecord<'a, CipherSuite> {
             }
             ContentType::Handshake => {
                 let mut parse = ParseBuffer::new(data);
-                Ok(RemoteRecord::Handshake(ServerHandshake::read(
+                Ok(RemoteRecord::Handshake(RemoteHandshake::read(
                     &mut parse, digest,
                 )?))
             }

@@ -1,5 +1,5 @@
 use crate::config::{TlsCipherSuite, TlsConfig};
-use crate::handshake::{ClientHandshake, ServerHandshake};
+use crate::handshake::{LocalHandshake, RemoteHandshake};
 use crate::key_schedule::{KeySchedule, ReadKeySchedule, WriteKeySchedule};
 use crate::record::{LocalRecord, RemoteRecord};
 use crate::record_reader::RecordReader;
@@ -71,7 +71,7 @@ where
             ContentType::Handshake => {
                 // Decode potentially coalesced handshake messages
                 while buf.remaining() > 0 {
-                    let inner = ServerHandshake::read(&mut buf, key_schedule.transcript_hash())?;
+                    let inner = RemoteHandshake::read(&mut buf, key_schedule.transcript_hash())?;
                     cb(key_schedule, RemoteRecord::Handshake(inner))?;
                 }
             }
@@ -470,7 +470,7 @@ where
     let client_hello = LocalRecord::client_hello(config, crypto_provider);
     let slice = tx_buf.write_record(&client_hello, write_key_schedule, Some(read_key_schedule))?;
 
-    if let LocalRecord::Handshake(ClientHandshake::ClientHello(client_hello), _) = client_hello {
+    if let LocalRecord::Handshake(LocalHandshake::ClientHello(client_hello), _) = client_hello {
         handshake.secret.replace(client_hello.secret);
         Ok((State::ServerHello, slice))
     } else {
@@ -487,7 +487,7 @@ where
     CipherSuite: TlsCipherSuite,
 {
     match record {
-        RemoteRecord::Handshake(ServerHandshake::ServerHello(_server_hello)) => {
+        RemoteRecord::Handshake(RemoteHandshake::ServerHello(_server_hello)) => {
             // TODO: this is the wrong handshake
             trace!("********* ClientHello");
             let _secret = handshake.secret.take().ok_or(TlsError::InvalidHandshake)?;
@@ -511,7 +511,7 @@ where
 {
     match record {
         RemoteRecord::Handshake(server_handshake) => match server_handshake {
-            ServerHandshake::ServerHello(server_hello) => {
+            RemoteHandshake::ServerHello(server_hello) => {
                 trace!("********* ServerHello");
                 let secret = handshake.secret.take().ok_or(TlsError::InvalidHandshake)?;
                 let shared = server_hello
@@ -544,8 +544,8 @@ where
         match record {
             RemoteRecord::Handshake(server_handshake) => {
                 match server_handshake {
-                    ServerHandshake::EncryptedExtensions(_) => {}
-                    ServerHandshake::Certificate(certificate) => {
+                    RemoteHandshake::EncryptedExtensions(_) => {}
+                    RemoteHandshake::Certificate(certificate) => {
                         let transcript = key_schedule.transcript_hash();
                         if let Ok(verifier) = crypto_provider.verifier() {
                             verifier.verify_certificate(transcript, &config.ca, certificate)?;
@@ -554,7 +554,7 @@ where
                             debug!("Certificate verification skipped due to no verifier!");
                         }
                     }
-                    ServerHandshake::CertificateVerify(verify) => {
+                    RemoteHandshake::CertificateVerify(verify) => {
                         if let Ok(verifier) = crypto_provider.verifier() {
                             verifier.verify_signature(verify)?;
                             debug!("Signature verified!");
@@ -562,10 +562,10 @@ where
                             debug!("Signature verification skipped due to no verifier!");
                         }
                     }
-                    ServerHandshake::CertificateRequest(request) => {
+                    RemoteHandshake::CertificateRequest(request) => {
                         handshake.certificate_request.replace(request.try_into()?);
                     }
-                    ServerHandshake::Finished(finished) => {
+                    RemoteHandshake::Finished(finished) => {
                         if !key_schedule.verify_server_finished(&finished)? {
                             warn!("Server signature verification failed");
                             return Err(TlsError::InvalidSignature);
@@ -623,7 +623,7 @@ where
 
     buffer
         .write_record(
-            &LocalRecord::Handshake(ClientHandshake::ClientCert(certificate), true),
+            &LocalRecord::Handshake(LocalHandshake::ClientCert(certificate), true),
             write_key_schedule,
             Some(read_key_schedule),
         )
@@ -665,7 +665,7 @@ where
 
             (
                 Ok(State::ClientFinished),
-                LocalRecord::Handshake(ClientHandshake::ClientCertVerify(certificate_verify), true),
+                LocalRecord::Handshake(LocalHandshake::ClientCertVerify(certificate_verify), true),
             )
         }
         Err(e) => {
@@ -701,7 +701,7 @@ where
     let (write_key_schedule, read_key_schedule) = key_schedule.as_split();
 
     buffer.write_record(
-        &LocalRecord::Handshake(ClientHandshake::Finished(client_finished), true),
+        &LocalRecord::Handshake(LocalHandshake::Finished(client_finished), true),
         write_key_schedule,
         Some(read_key_schedule),
     )

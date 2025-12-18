@@ -2,7 +2,7 @@ use core::ops::Range;
 
 use crate::{
     TlsError, alert::AlertDescription, common::decrypted_buffer_info::DecryptedBufferInfo,
-    config::TlsCipherSuite, handshake::ServerHandshake, record::RemoteRecord,
+    config::TlsCipherSuite, handshake::RemoteHandshake, record::RemoteRecord,
 };
 
 pub struct DecryptedReadHandler<'a> {
@@ -50,7 +50,7 @@ impl DecryptedReadHandler<'_> {
                 }
             }
             RemoteRecord::ChangeCipherSpec(_) => Err(TlsError::InternalError),
-            RemoteRecord::Handshake(ServerHandshake::NewSessionTicket(_)) => {
+            RemoteRecord::Handshake(RemoteHandshake::NewSessionTicket(_)) => {
                 // TODO: we should validate extensions and abort. We can do this automatically
                 // as long as the connection is unsplit, however, split connections must be aborted
                 // by the user.

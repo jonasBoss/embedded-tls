@@ -65,7 +65,7 @@ impl HandshakeType {
 }
 
 #[allow(clippy::large_enum_variant)]
-pub enum ClientHandshake<'config, 'a, CipherSuite>
+pub enum LocalHandshake<'config, 'a, CipherSuite>
 where
     CipherSuite: TlsCipherSuite,
 {
@@ -75,25 +75,25 @@ where
     Finished(Finished<HashOutputSize<CipherSuite>>),
 }
 
-impl<CipherSuite> ClientHandshake<'_, '_, CipherSuite>
+impl<CipherSuite> LocalHandshake<'_, '_, CipherSuite>
 where
     CipherSuite: TlsCipherSuite,
 {
     fn handshake_type(&self) -> HandshakeType {
         match self {
-            ClientHandshake::ClientHello(_) => HandshakeType::ClientHello,
-            ClientHandshake::Finished(_) => HandshakeType::Finished,
-            ClientHandshake::ClientCert(_) => HandshakeType::Certificate,
-            ClientHandshake::ClientCertVerify(_) => HandshakeType::CertificateVerify,
+            LocalHandshake::ClientHello(_) => HandshakeType::ClientHello,
+            LocalHandshake::Finished(_) => HandshakeType::Finished,
+            LocalHandshake::ClientCert(_) => HandshakeType::Certificate,
+            LocalHandshake::ClientCertVerify(_) => HandshakeType::CertificateVerify,
         }
     }
 
     fn encode_inner(&self, buf: &mut CryptoBuffer<'_>) -> Result<(), TlsError> {
         match self {
-            ClientHandshake::ClientHello(inner) => inner.encode(buf),
-            ClientHandshake::Finished(inner) => inner.encode(buf),
-            ClientHandshake::ClientCert(inner) => inner.encode(buf),
-            ClientHandshake::ClientCertVerify(inner) => inner.encode(buf),
+            LocalHandshake::ClientHello(inner) => inner.encode(buf),
+            LocalHandshake::Finished(inner) => inner.encode(buf),
+            LocalHandshake::ClientCert(inner) => inner.encode(buf),
+            LocalHandshake::ClientCertVerify(inner) => inner.encode(buf),
         }
     }
 
@@ -111,7 +111,7 @@ where
         write_key_schedule: &mut WriteKeySchedule<CipherSuite>,
     ) -> Result<(), TlsError> {
         let enc_buf = buf.as_mut_slice();
-        if let ClientHandshake::ClientHello(hello) = self {
+        if let LocalHandshake::ClientHello(hello) = self {
             hello.finalize(enc_buf, transcript, write_key_schedule)
         } else {
             transcript.update(enc_buf);
@@ -127,7 +127,7 @@ where
 }
 
 #[allow(clippy::large_enum_variant)]
-pub enum ServerHandshake<'a, CipherSuite: TlsCipherSuite> {
+pub enum RemoteHandshake<'a, CipherSuite: TlsCipherSuite> {
     ServerHello(ServerHello<'a>),
     EncryptedExtensions(EncryptedExtensions<'a>),
     NewSessionTicket(NewSessionTicket<'a>),
@@ -137,51 +137,51 @@ pub enum ServerHandshake<'a, CipherSuite: TlsCipherSuite> {
     Finished(Finished<HashOutputSize<CipherSuite>>),
 }
 
-impl<CipherSuite: TlsCipherSuite> ServerHandshake<'_, CipherSuite> {
+impl<CipherSuite: TlsCipherSuite> RemoteHandshake<'_, CipherSuite> {
     #[allow(dead_code)]
     pub fn handshake_type(&self) -> HandshakeType {
         match self {
-            ServerHandshake::ServerHello(_) => HandshakeType::ServerHello,
-            ServerHandshake::EncryptedExtensions(_) => HandshakeType::EncryptedExtensions,
-            ServerHandshake::NewSessionTicket(_) => HandshakeType::NewSessionTicket,
-            ServerHandshake::Certificate(_) => HandshakeType::Certificate,
-            ServerHandshake::CertificateRequest(_) => HandshakeType::CertificateRequest,
-            ServerHandshake::CertificateVerify(_) => HandshakeType::CertificateVerify,
-            ServerHandshake::Finished(_) => HandshakeType::Finished,
+            RemoteHandshake::ServerHello(_) => HandshakeType::ServerHello,
+            RemoteHandshake::EncryptedExtensions(_) => HandshakeType::EncryptedExtensions,
+            RemoteHandshake::NewSessionTicket(_) => HandshakeType::NewSessionTicket,
+            RemoteHandshake::Certificate(_) => HandshakeType::Certificate,
+            RemoteHandshake::CertificateRequest(_) => HandshakeType::CertificateRequest,
+            RemoteHandshake::CertificateVerify(_) => HandshakeType::CertificateVerify,
+            RemoteHandshake::Finished(_) => HandshakeType::Finished,
         }
     }
 }
 
-impl<CipherSuite: TlsCipherSuite> Debug for ServerHandshake<'_, CipherSuite> {
+impl<CipherSuite: TlsCipherSuite> Debug for RemoteHandshake<'_, CipherSuite> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            ServerHandshake::ServerHello(inner) => Debug::fmt(inner, f),
-            ServerHandshake::EncryptedExtensions(inner) => Debug::fmt(inner, f),
-            ServerHandshake::Certificate(inner) => Debug::fmt(inner, f),
-            ServerHandshake::CertificateRequest(inner) => Debug::fmt(inner, f),
-            ServerHandshake::CertificateVerify(inner) => Debug::fmt(inner, f),
-            ServerHandshake::Finished(inner) => Debug::fmt(inner, f),
-            ServerHandshake::NewSessionTicket(inner) => Debug::fmt(inner, f),
+            RemoteHandshake::ServerHello(inner) => Debug::fmt(inner, f),
+            RemoteHandshake::EncryptedExtensions(inner) => Debug::fmt(inner, f),
+            RemoteHandshake::Certificate(inner) => Debug::fmt(inner, f),
+            RemoteHandshake::CertificateRequest(inner) => Debug::fmt(inner, f),
+            RemoteHandshake::CertificateVerify(inner) => Debug::fmt(inner, f),
+            RemoteHandshake::Finished(inner) => Debug::fmt(inner, f),
+            RemoteHandshake::NewSessionTicket(inner) => Debug::fmt(inner, f),
         }
     }
 }
 
 #[cfg(feature = "defmt")]
-impl<'a, CipherSuite: TlsCipherSuite> defmt::Format for ServerHandshake<'a, CipherSuite> {
+impl<'a, CipherSuite: TlsCipherSuite> defmt::Format for RemoteHandshake<'a, CipherSuite> {
     fn format(&self, f: defmt::Formatter<'_>) {
         match self {
-            ServerHandshake::ServerHello(inner) => defmt::write!(f, "{}", inner),
-            ServerHandshake::EncryptedExtensions(inner) => defmt::write!(f, "{}", inner),
-            ServerHandshake::Certificate(inner) => defmt::write!(f, "{}", inner),
-            ServerHandshake::CertificateRequest(inner) => defmt::write!(f, "{}", inner),
-            ServerHandshake::CertificateVerify(inner) => defmt::write!(f, "{}", inner),
-            ServerHandshake::Finished(inner) => defmt::write!(f, "{}", inner),
-            ServerHandshake::NewSessionTicket(inner) => defmt::write!(f, "{}", inner),
+            RemoteHandshake::ServerHello(inner) => defmt::write!(f, "{}", inner),
+            RemoteHandshake::EncryptedExtensions(inner) => defmt::write!(f, "{}", inner),
+            RemoteHandshake::Certificate(inner) => defmt::write!(f, "{}", inner),
+            RemoteHandshake::CertificateRequest(inner) => defmt::write!(f, "{}", inner),
+            RemoteHandshake::CertificateVerify(inner) => defmt::write!(f, "{}", inner),
+            RemoteHandshake::Finished(inner) => defmt::write!(f, "{}", inner),
+            RemoteHandshake::NewSessionTicket(inner) => defmt::write!(f, "{}", inner),
         }
     }
 }
 
-impl<'a, CipherSuite: TlsCipherSuite> ServerHandshake<'a, CipherSuite> {
+impl<'a, CipherSuite: TlsCipherSuite> RemoteHandshake<'a, CipherSuite> {
     pub fn read(
         buf: &mut ParseBuffer<'a>,
         digest: &mut CipherSuite::Hash,
@@ -190,7 +190,7 @@ impl<'a, CipherSuite: TlsCipherSuite> ServerHandshake<'a, CipherSuite> {
         let mut handshake = Self::parse(buf)?;
         let handshake_end = buf.offset();
 
-        if let ServerHandshake::Finished(finished) = &mut handshake {
+        if let RemoteHandshake::Finished(finished) = &mut handshake {
             finished.hash.replace(digest.clone().finalize());
         }
 
@@ -208,25 +208,25 @@ impl<'a, CipherSuite: TlsCipherSuite> ServerHandshake<'a, CipherSuite> {
 
         let handshake = match handshake_type {
             //HandshakeType::ClientHello => {}
-            HandshakeType::ServerHello => ServerHandshake::ServerHello(ServerHello::parse(buf)?),
+            HandshakeType::ServerHello => RemoteHandshake::ServerHello(ServerHello::parse(buf)?),
             HandshakeType::NewSessionTicket => {
-                ServerHandshake::NewSessionTicket(NewSessionTicket::parse(buf)?)
+                RemoteHandshake::NewSessionTicket(NewSessionTicket::parse(buf)?)
             }
             //HandshakeType::EndOfEarlyData => {}
             HandshakeType::EncryptedExtensions => {
-                ServerHandshake::EncryptedExtensions(EncryptedExtensions::parse(buf)?)
+                RemoteHandshake::EncryptedExtensions(EncryptedExtensions::parse(buf)?)
             }
-            HandshakeType::Certificate => ServerHandshake::Certificate(CertificateRef::parse(buf)?),
+            HandshakeType::Certificate => RemoteHandshake::Certificate(CertificateRef::parse(buf)?),
 
             HandshakeType::CertificateRequest => {
-                ServerHandshake::CertificateRequest(CertificateRequestRef::parse(buf)?)
+                RemoteHandshake::CertificateRequest(CertificateRequestRef::parse(buf)?)
             }
 
             HandshakeType::CertificateVerify => {
-                ServerHandshake::CertificateVerify(CertificateVerifyRef::parse(buf)?)
+                RemoteHandshake::CertificateVerify(CertificateVerifyRef::parse(buf)?)
             }
             HandshakeType::Finished => {
-                ServerHandshake::Finished(Finished::parse(buf, content_len)?)
+                RemoteHandshake::Finished(Finished::parse(buf, content_len)?)
             }
             //HandshakeType::KeyUpdate => {}
             //HandshakeType::MessageHash => {}
