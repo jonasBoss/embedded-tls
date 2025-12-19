@@ -3,7 +3,7 @@ use heapless::Vec;
 use crate::cipher_suites::CipherSuite;
 use crate::crypto_engine::CryptoEngine;
 use crate::extensions::extension_data::key_share::KeyShareEntry;
-use crate::extensions::messages::ServerHelloExtension;
+use crate::extensions::messages::{ClientHelloExtension, ServerHelloExtension};
 use crate::parse_buffer::ParseBuffer;
 use crate::{TlsError, unused};
 use p256::PublicKey;
@@ -15,27 +15,27 @@ pub struct RemoteServerHello<'a> {
     extensions: Vec<ServerHelloExtension<'a>, 4>,
 }
 
+/// Parses the the remote hello message from the beginnig to the session id
+///
+/// # returns
+/// the session id
+fn parse_session_id<'a>(buf: &mut ParseBuffer<'a>) -> Result<ParseBuffer<'a>, TlsError> {
+    let _version = buf.read_u16().map_err(|_| TlsError::InvalidHandshake)?;
+
+    let mut random = [0; 32];
+    buf.fill(&mut random)?;
+
+    let session_id_length = buf
+        .read_u8()
+        .map_err(|_| TlsError::InvalidSessionIdLength)?;
+
+    buf.slice(session_id_length as usize)
+        .map_err(|_| TlsError::InvalidSessionIdLength)
+}
+
 impl<'a> RemoteServerHello<'a> {
     pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<RemoteServerHello<'a>, TlsError> {
-        //let mut buf = ParseBuffer::new(&buf[0..content_length]);
-        //let mut buf = ParseBuffer::new(&buf);
-
-        let _version = buf.read_u16().map_err(|_| TlsError::InvalidHandshake)?;
-
-        let mut random = [0; 32];
-        buf.fill(&mut random)?;
-
-        let session_id_length = buf
-            .read_u8()
-            .map_err(|_| TlsError::InvalidSessionIdLength)?;
-
-        //info!("sh 1");
-
-        let session_id = buf
-            .slice(session_id_length as usize)
-            .map_err(|_| TlsError::InvalidSessionIdLength)?;
-        //info!("sh 2");
-
+        let session_id = parse_session_id(buf)?;
         let cipher_suite = CipherSuite::parse(buf).map_err(|_| TlsError::InvalidCipherSuite)?;
 
         ////info!("sh 3");
@@ -79,5 +79,46 @@ impl<'a> RemoteServerHello<'a> {
         let shared = secret.diffie_hellman(&server_public_key);
 
         Some(CryptoEngine::new(group, shared))
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct RemoteClientHello<'a> {
+    cipher_suites: &'a [u8],
+    extensions: Vec<ClientHelloExtension<'a>, 8>,
+}
+
+impl<'a> RemoteClientHello<'a> {
+    pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
+        let session_id = parse_session_id(buf)?;
+        let cipher_suites_len = buf.read_u16().map_err(|_| TlsError::InvalidCipherSuite)?;
+        if cipher_suites_len % 2 != 0 {
+            return Err(TlsError::InvalidCipherSuite);
+        }
+        let cipher_suites = buf
+            .slice(cipher_suites_len as usize)
+            .map_err(|_| TlsError::InvalidCipherSuite)?
+            .as_slice();
+
+        // skip the compression methods, tls 1.3 does not support them
+        let compression_len = buf.read_u8().map_err(|_| TlsError::InvalidHandshake)?;
+        let _compression = buf
+            .slice(compression_len as usize)
+            .map_err(|_| TlsError::InvalidHandshake)?;
+
+        let extensions = ClientHelloExtension::parse_vector(buf)?;
+
+        unused(session_id);
+        Ok(Self {
+            cipher_suites,
+            extensions,
+        })
+    }
+
+    pub fn cipher_suites(&self) -> impl Iterator<Item = Result<CipherSuite, TlsError>> {
+        self.cipher_suites.chunks(2).map(|c| {
+            CipherSuite::parse(&mut ParseBuffer::new(c)).map_err(|_| TlsError::InvalidCipherSuite)
+        })
     }
 }

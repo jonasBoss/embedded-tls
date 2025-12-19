@@ -107,14 +107,18 @@ where
             })
             .encode(buf)?;
 
-            ClientHelloExtension::KeyShare(KeyShareClientHello {
-                client_shares: Vec::from_slice(&[KeyShareEntry {
-                    group: NamedGroup::Secp256r1,
-                    opaque: public_key,
-                }])
-                .unwrap(),
-            })
-            .encode(buf)?;
+            let entries = [KeyShareEntry {
+                group: NamedGroup::Secp256r1,
+                opaque: public_key,
+            }];
+            // ClientHelloExtension::KeyShare(KeyShareClientHello {
+            //     client_shares: Vec::from_slice(&[KeyShareEntry {
+            //         group: NamedGroup::Secp256r1,
+            //         opaque: public_key,
+            //     }])
+            //     .unwrap(),
+            // })
+            // .encode(buf)?;
 
             if let Some(server_name) = self.config.server_name {
                 ClientHelloExtension::ServerName(ServerNameList::single(server_name))

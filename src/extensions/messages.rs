@@ -21,7 +21,7 @@ extension_group! {
         SupportedVersions(SupportedVersionsClientHello<16>),
         SignatureAlgorithms(SignatureAlgorithms<19>),
         SupportedGroups(SupportedGroups<16>),
-        KeyShare(KeyShareClientHello<'a, 1>),
+        KeyShare(KeyShareClientHello<'a>),
         PreSharedKey(PreSharedKeyClientHello<'a, 4>),
         PskKeyExchangeModes(PskKeyExchangeModes<4>),
         SignatureAlgorithmsCert(SignatureAlgorithmsCert<19>),
