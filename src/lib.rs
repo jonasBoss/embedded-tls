@@ -70,6 +70,7 @@ mod parse_buffer;
 pub mod read_buffer;
 mod record;
 mod record_reader;
+pub(crate) mod storage_location;
 mod write_buffer;
 
 pub use config::UnsecureProvider;
