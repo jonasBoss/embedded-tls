@@ -1,9 +1,8 @@
-use heapless::Vec;
-
 use crate::{
     TlsError,
     buffer::CryptoBuffer,
     parse_buffer::{ParseBuffer, ParseError},
+    parse_encode::{Encode, Parse, Remote, parse_encode_list},
 };
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -29,8 +28,8 @@ pub enum NamedGroup {
     SecP384r1MLKEM1024,
 }
 
-impl NamedGroup {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+impl Parse<'_> for NamedGroup {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
         match buf.read_u16()? {
             0x0017 => Ok(Self::Secp256r1),
             0x0018 => Ok(Self::Secp384r1),
@@ -51,7 +50,8 @@ impl NamedGroup {
             _ => Err(ParseError::InvalidData),
         }
     }
-
+}
+impl NamedGroup {
     pub fn as_u16(self) -> u16 {
         match self {
             Self::Secp256r1 => 0x0017,
@@ -71,34 +71,19 @@ impl NamedGroup {
             Self::SecP384r1MLKEM1024 => 0x11ED,
         }
     }
+}
 
-    pub fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
+impl Encode for NamedGroup {
+    fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
         buf.push_u16(self.as_u16())
             .map_err(|_| TlsError::EncodeError)
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct SupportedGroups<const N: usize> {
-    pub supported_groups: Vec<NamedGroup, N>,
-}
+parse_encode_list!(SupportedGroups<'a, Location>(NamedGroup));
 
-impl<const N: usize> SupportedGroups<N> {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
-        let data_length = buf.read_u16()? as usize;
-
-        Ok(Self {
-            supported_groups: buf.read_list::<_, N>(data_length, NamedGroup::parse)?,
-        })
-    }
-
-    pub fn encode(&self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
-        buf.with_u16_length(|buf| {
-            for g in &self.supported_groups {
-                g.encode(buf)?;
-            }
-            Ok(())
-        })
+impl PartialEq for SupportedGroups<'_, Remote> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
     }
 }

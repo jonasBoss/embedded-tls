@@ -67,7 +67,7 @@ pub mod flush_policy;
 mod handshake;
 mod key_schedule;
 mod parse_buffer;
-pub(crate) mod parse_encode;
+pub mod parse_encode;
 pub mod read_buffer;
 mod record;
 mod record_reader;

@@ -1,7 +1,6 @@
 use core::marker::PhantomData;
 
 use digest::{Digest, OutputSizeUser};
-use heapless::Vec;
 use p256::EncodedPoint;
 use p256::ecdh::EphemeralSecret;
 use p256::elliptic_curve::rand_core::RngCore;
@@ -10,11 +9,13 @@ use typenum::Unsigned;
 use crate::TlsError;
 use crate::config::{TlsCipherSuite, TlsConfig};
 use crate::extensions::extension_data::key_share::{KeyShareClientHello, KeyShareEntry};
-use crate::extensions::extension_data::pre_shared_key::PreSharedKeyClientHello;
+use crate::extensions::extension_data::pre_shared_key::{
+    Binders, PreSharedKeyClientHello, PskIdentity, PskIdentityList,
+};
 use crate::extensions::extension_data::psk_key_exchange_modes::{
     PskKeyExchangeMode, PskKeyExchangeModes,
 };
-use crate::extensions::extension_data::server_name::ServerNameList;
+use crate::extensions::extension_data::server_name::{ServerName, ServerNameList};
 use crate::extensions::extension_data::signature_algorithms::SignatureAlgorithms;
 use crate::extensions::extension_data::supported_groups::{NamedGroup, SupportedGroups};
 use crate::extensions::extension_data::supported_versions::{SupportedVersionsClientHello, TLS13};
@@ -83,42 +84,44 @@ where
             // Implementations of this specification MUST send this extension in the
             // ClientHello containing all versions of TLS which they are prepared to
             // negotiate
-            ClientHelloExtension::SupportedVersions(SupportedVersionsClientHello {
-                versions: Vec::from_slice(&[TLS13]).unwrap(),
-            })
+            ClientHelloExtension::SupportedVersions(SupportedVersionsClientHello::new(
+                &mut Some(TLS13).into_iter(),
+            ))
             .encode(buf)?;
 
-            ClientHelloExtension::SignatureAlgorithms(SignatureAlgorithms {
-                supported_signature_algorithms: self.config.signature_schemes.clone(),
-            })
+            ClientHelloExtension::SignatureAlgorithms(SignatureAlgorithms::new(
+                &mut self.config.signature_schemes.iter().copied(),
+            ))
             .encode(buf)?;
 
             if let Some(max_fragment_length) = self.config.max_fragment_length {
                 ClientHelloExtension::MaxFragmentLength(max_fragment_length).encode(buf)?;
             }
 
-            ClientHelloExtension::SupportedGroups(SupportedGroups {
-                supported_groups: self.config.named_groups.clone(),
-            })
+            ClientHelloExtension::SupportedGroups(SupportedGroups::new(
+                &mut self.config.named_groups.iter().copied(),
+            ))
             .encode(buf)?;
 
-            ClientHelloExtension::PskKeyExchangeModes(PskKeyExchangeModes {
-                modes: Vec::from_slice(&[PskKeyExchangeMode::PskDheKe]).unwrap(),
-            })
+            ClientHelloExtension::PskKeyExchangeModes(PskKeyExchangeModes::new(
+                &mut Some(PskKeyExchangeMode::PskDheKe).into_iter(),
+            ))
             .encode(buf)?;
 
-            ClientHelloExtension::KeyShare(KeyShareClientHello {
-                client_shares: Vec::from_slice(&[KeyShareEntry {
+            ClientHelloExtension::KeyShare(KeyShareClientHello::new(
+                &mut Some(KeyShareEntry {
                     group: NamedGroup::Secp256r1,
                     opaque: public_key,
-                }])
-                .unwrap(),
-            })
+                })
+                .into_iter(),
+            ))
             .encode(buf)?;
 
             if let Some(server_name) = self.config.server_name {
-                ClientHelloExtension::ServerName(ServerNameList::single(server_name))
-                    .encode(buf)?;
+                ClientHelloExtension::ServerName(ServerNameList::new(
+                    &mut Some(ServerName::hostname(server_name)).into_iter(),
+                ))
+                .encode(buf)?;
             }
 
             // Section 4.2
@@ -128,8 +131,13 @@ where
             // the ClientHello.
             if let Some((_, identities)) = &self.config.psk {
                 ClientHelloExtension::PreSharedKey(PreSharedKeyClientHello {
-                    identities: identities.clone(),
-                    hash_size: <CipherSuite::Hash as OutputSizeUser>::output_size(),
+                    identities: PskIdentityList::new(
+                        &mut identities.iter().map(|&i| PskIdentity::external(i)),
+                    ),
+                    binders: Binders::placeholders(
+                        &mut (0..identities.len())
+                            .map(|_| <CipherSuite::Hash as OutputSizeUser>::output_size() as u8),
+                    ),
                 })
                 .encode(buf)?;
             }

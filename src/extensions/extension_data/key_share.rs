@@ -1,48 +1,26 @@
-use heapless::Vec;
-
 use crate::buffer::CryptoBuffer;
 use crate::extensions::extension_data::supported_groups::NamedGroup;
 
 use crate::TlsError;
 use crate::parse_buffer::{ParseBuffer, ParseError};
+use crate::parse_encode::{Encode, Parse, parse_encode_list};
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct KeyShareServerHello<'a>(pub KeyShareEntry<'a>);
 
-impl<'a> KeyShareServerHello<'a> {
-    pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+impl<'a> Parse<'a> for KeyShareServerHello<'a> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
         Ok(KeyShareServerHello(KeyShareEntry::parse(buf)?))
     }
-
-    pub fn encode(&self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
+}
+impl Encode for KeyShareServerHello<'_> {
+    fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
         self.0.encode(buf)
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct KeyShareClientHello<'a, const N: usize> {
-    pub client_shares: Vec<KeyShareEntry<'a>, N>,
-}
-
-impl<'a, const N: usize> KeyShareClientHello<'a, N> {
-    pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
-        let len = buf.read_u16()? as usize;
-        Ok(KeyShareClientHello {
-            client_shares: buf.read_list(len, KeyShareEntry::parse)?,
-        })
-    }
-
-    pub fn encode(&self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
-        buf.with_u16_length(|buf| {
-            for client_share in &self.client_shares {
-                client_share.encode(buf)?;
-            }
-            Ok(())
-        })
-    }
-}
+parse_encode_list!(KeyShareClientHello<'a, Location>(KeyShareEntry<'a>));
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -70,8 +48,8 @@ pub struct KeyShareEntry<'a> {
     pub(crate) opaque: &'a [u8],
 }
 
-impl<'a> KeyShareEntry<'a> {
-    pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+impl<'a> Parse<'a> for KeyShareEntry<'a> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
         let group = NamedGroup::parse(buf)?;
 
         let opaque_len = buf.read_u16()?;
@@ -82,8 +60,10 @@ impl<'a> KeyShareEntry<'a> {
             opaque: opaque.as_slice(),
         })
     }
+}
 
-    pub fn encode(&self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
+impl Encode for KeyShareEntry<'_> {
+    fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
         self.group.encode(buf)?;
 
         buf.with_u16_length(|buf| buf.extend_from_slice(self.opaque))

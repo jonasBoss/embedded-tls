@@ -1,32 +1,82 @@
 macro_rules! extension_group {
-    (pub enum $name:ident$(<$lt:lifetime>)? {
-        $($extension:ident($extension_data:ty)),+
+    // macro entry
+    (pub enum $name:ident $( < $lt:lifetime > )? {
+        $(
+            $extension:ident($extension_data:ident$(<$($ext_gen:tt),*>)? )
+        ),* $(,)?
     }) => {
+        extension_group!(
+            @enum_name $name,
+            @lifetime $($lt)?,
+            @location ,
+            @remote ,
+            @local ,
+            @where_bound ,
+            @extension $($extension),*,
+            @ext_data $($extension_data),*,
+            @ext_gene $($(< $($ext_gen),* >)?),*
+        );
+    };
+    (pub enum $name:ident<$lt:lifetime, Location> {
+        $(
+            $extension:ident($extension_data:ident$(<$($ext_gen:tt),*>)? )
+        ),* $(,)?
+    }) => {
+        extension_group!(
+            @enum_name $name,
+            @lifetime $lt,
+            @location Location,
+            @remote $crate::parse_encode::Remote,
+            @local $crate::parse_encode::Local,
+            @where_bound Location : $crate::parse_encode::StorageType,
+            @extension $($extension),*,
+            @ext_data $($extension_data),*,
+            @ext_gene $($(< $($ext_gen),* >)?),*
+        );
+    };    // step 1a create where bound
+    // step 2 impl
+    (
+        @enum_name $name:ident,
+        @lifetime $($lt:lifetime)?,
+        @location $($loc:ident)?,
+        @remote $($remote:path)?,
+        @local $($local:path)?,
+        @where_bound $( $wt:ty : $trait:path ),*,
+        @extension $($extension:ident),*,
+        @ext_data $($extension_data:ident),*,
+        @ext_gene $($(< $($ext_gen:tt),* >)?),*
+    ) => {
         #[derive(Debug, Clone)]
         #[cfg_attr(feature = "defmt", derive(defmt::Format))]
         #[allow(dead_code)] // extension_data may not be used
-        pub enum $name$(<$lt>)? {
-            $($extension($extension_data)),+
-        }
+        pub enum $name< $($lt,)? $($loc)? >
+        where $( $wt : $trait ),*
+            {$($extension($extension_data $(< $($ext_gen),* >)? )),*}
 
-        #[allow(dead_code)] // not all methods are used
-        impl$(<$lt>)? $name$(<$lt>)? {
-            pub fn extension_type(&self) -> crate::extensions::ExtensionType {
+
+        impl< $($lt,)? $($loc)? > $name< $($lt,)? $($loc)? >
+        where $( $wt : $trait ),*
+        {
+            pub fn extension_type(&self) -> $crate::extensions::ExtensionType {
                 match self {
-                    $(Self::$extension(_) => crate::extensions::ExtensionType::$extension),+
+                    $(Self::$extension(_) => $crate::extensions::ExtensionType::$extension),*
                 }
             }
+        }
 
-            pub fn encode(&self, buf: &mut crate::buffer::CryptoBuffer) -> Result<(), crate::TlsError> {
+        impl$(< $lt >)? $name< $($lt,)? $($local)? > {
+            pub fn encode(self, buf: &mut $crate::buffer::CryptoBuffer) -> Result<(), $crate::TlsError> {
                 self.extension_type().encode(buf)?;
 
                 buf.with_u16_length(|buf| match self {
-                    $(Self::$extension(ext_data) => ext_data.encode(buf)),+
+                    $(Self::$extension(ext_data) =>  $crate::parse_encode::Encode::encode(ext_data, buf)),*
                 })
             }
+        }
 
-            pub fn parse(buf: &mut crate::parse_buffer::ParseBuffer$(<$lt>)?) -> Result<Self, crate::TlsError> {
-                // Consume extension data even if we don't recognize the extension
+        impl$(< $lt >)? $name< $($lt,)? $($remote)? > {
+            pub fn parse(buf: &mut $crate::parse_buffer::ParseBuffer$(< $lt >)?) -> Result<Self, $crate::TlsError>{
+               // Consume extension data even if we don't recognize the extension
                 let extension_type = crate::extensions::ExtensionType::parse(buf);
                 let data_len = buf.read_u16().map_err(|_| crate::TlsError::DecodeError)? as usize;
                 let mut ext_data = buf.slice(data_len).map_err(|_| crate::TlsError::DecodeError)?;
@@ -43,7 +93,7 @@ macro_rules! extension_group {
                 trace!("Extension data length: {}", data_len);
 
                 match ext_type {
-                    $(crate::extensions::ExtensionType::$extension => Ok(Self::$extension(<$extension_data>::parse(&mut ext_data).map_err(|err| {
+                    $(crate::extensions::ExtensionType::$extension => Ok(Self::$extension($crate::parse_encode::Parse::parse(&mut ext_data).map_err(|err| {
                         warn!("Failed to parse extension data: {:?}", err);
                         crate::TlsError::DecodeError
                     })?)),)+

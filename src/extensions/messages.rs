@@ -16,15 +16,15 @@ use crate::extensions::{
 
 // Source: https://www.rfc-editor.org/rfc/rfc8446#section-4.2 table, rows marked with CH
 extension_group! {
-    pub enum ClientHelloExtension<'a> {
-        ServerName(ServerNameList<'a, 1>),
-        SupportedVersions(SupportedVersionsClientHello<1>),
-        SignatureAlgorithms(SignatureAlgorithms<25>),
-        SupportedGroups(SupportedGroups<13>),
-        KeyShare(KeyShareClientHello<'a, 1>),
-        PreSharedKey(PreSharedKeyClientHello<'a, 4>),
-        PskKeyExchangeModes(PskKeyExchangeModes<4>),
-        SignatureAlgorithmsCert(SignatureAlgorithmsCert<25>),
+    pub enum ClientHelloExtension<'a, Location> {
+        ServerName(ServerNameList<'a, Location>),
+        SupportedVersions(SupportedVersionsClientHello<'a, Location>),
+        SignatureAlgorithms(SignatureAlgorithms<'a, Location>),
+        SupportedGroups(SupportedGroups<'a, Location>),
+        KeyShare(KeyShareClientHello<'a, Location>),
+        PreSharedKey(PreSharedKeyClientHello<'a, Location>),
+        PskKeyExchangeModes(PskKeyExchangeModes<'a, Location>),
+        SignatureAlgorithmsCert(SignatureAlgorithmsCert<'a, Location>),
         MaxFragmentLength(MaxFragmentLength),
         StatusRequest(Unimplemented<'a>),
         UseSrtp(Unimplemented<'a>),
@@ -54,10 +54,10 @@ extension_group! {
 
 // Source: https://www.rfc-editor.org/rfc/rfc8446#section-4.2 table, rows marked with EE
 extension_group! {
-    pub enum EncryptedExtensionsExtension<'a> {
+    pub enum EncryptedExtensionsExtension<'a, Location> {
         ServerName(ServerNameResponse),
         MaxFragmentLength(MaxFragmentLength),
-        SupportedGroups(SupportedGroups<13>),
+        SupportedGroups(SupportedGroups<'a, Location>),
         UseSrtp(Unimplemented<'a>),
         Heartbeat(Unimplemented<'a>),
         ApplicationLayerProtocolNegotiation(Unimplemented<'a>),
@@ -69,9 +69,9 @@ extension_group! {
 
 // Source: https://www.rfc-editor.org/rfc/rfc8446#section-4.2 table, rows marked with CR
 extension_group! {
-    pub enum CertificateRequestExtension<'a> {
+    pub enum CertificateRequestExtension<'a, Location> {
         StatusRequest(Unimplemented<'a>),
-        SignatureAlgorithms(SignatureAlgorithms<25>),
+        SignatureAlgorithms(SignatureAlgorithms<'a, Location>),
         SignedCertificateTimestamp(Unimplemented<'a>),
         CertificateAuthorities(Unimplemented<'a>),
         OidFilters(Unimplemented<'a>),
