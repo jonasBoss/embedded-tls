@@ -46,7 +46,7 @@ impl<'a> Parse<'a> for SliceU8<'a> {
     }
 }
 
-impl<'a> Encode for SliceU8<'a> {
+impl Encode for SliceU8<'_> {
     fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
         buf.with_u8_length(|buf| buf.extend_from_slice(self.0))
     }
@@ -117,7 +117,7 @@ impl<'a, U: Parse<'a> + FormatBounds> Parse<'a> for ZerocopyList<'a, U> {
 
 impl<'a, U: Parse<'a> + FormatBounds> Debug for ZerocopyList<'a, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(&mut self.iter()).finish()
+        f.debug_list().entries(self.iter()).finish()
     }
 }
 
@@ -138,16 +138,16 @@ impl<'a, U: Encode> DynIterList<'a, U> {
     }
 }
 
-impl<'a, U: Encode> Encode for DynIterList<'a, U> {
+impl<U: Encode> Encode for DynIterList<'_, U> {
     fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
         for u in self.0 {
-            u.encode(buf)?
+            u.encode(buf)?;
         }
         Ok(())
     }
 }
 
-impl<'a, U: Encode> Debug for DynIterList<'a, U> {
+impl<U: Encode> Debug for DynIterList<'_, U> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("DynIterList").finish()
     }
@@ -160,7 +160,7 @@ impl<'a, U: Encode> defmt::Format for DynIterList<'a, U> {
     }
 }
 
-impl<'a, U: Encode> Clone for DynIterList<'a, U> {
+impl<U: Encode> Clone for DynIterList<'_, U> {
     fn clone(&self) -> Self {
         // this impl is here so we can derive(Clone) on any wrapping types that use the StorageType trait
         #[cfg(not(feature = "defmt"))]
@@ -222,12 +222,14 @@ macro_rules! parse_encode_list {
             }
         }
 
+        #[allow(unused)]
         impl<'a> $name<'a, $crate::parse_encode::Local> {
             pub fn new(iter: &'a mut dyn Iterator<Item = $item>) -> Self {
                 Self(<$crate::parse_encode::Local as $crate::parse_encode::StorageType>::ListType::new(iter))
             }
         }
 
+        #[allow(unused)]
         impl<'a> $name<'a, $crate::parse_encode::Remote> {
             pub fn iter(&self) -> impl Iterator<Item = $item> {
                 self.0.iter()

@@ -2,9 +2,8 @@ use crate::{
     TlsError,
     buffer::CryptoBuffer,
     parse_buffer::{ParseBuffer, ParseError},
+    parse_encode::{Encode, Parse, Remote, parse_encode_list},
 };
-
-use heapless::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -55,8 +54,8 @@ pub enum SignatureScheme {
     //(0xFFFF)
 }
 
-impl SignatureScheme {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+impl Parse<'_> for SignatureScheme {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
         match buf.read_u16()? {
             0x0401 => Ok(Self::RsaPkcs1Sha256),
             0x0501 => Ok(Self::RsaPkcs1Sha384),
@@ -95,7 +94,15 @@ impl SignatureScheme {
             _ => Err(ParseError::InvalidData),
         }
     }
+}
 
+impl Encode for SignatureScheme {
+    fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
+        buf.push_u16(self.as_u16())
+    }
+}
+
+impl SignatureScheme {
     #[must_use]
     pub fn as_u16(self) -> u16 {
         match self {
@@ -136,29 +143,10 @@ impl SignatureScheme {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct SignatureAlgorithms<const N: usize> {
-    pub supported_signature_algorithms: Vec<SignatureScheme, N>,
-}
+parse_encode_list!(SignatureAlgorithms<'a, Location>(SignatureScheme), u16);
 
-impl<const N: usize> SignatureAlgorithms<N> {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
-        let data_length = buf.read_u16()? as usize;
-
-        Ok(Self {
-            supported_signature_algorithms: buf
-                .read_list::<_, N>(data_length, SignatureScheme::parse)?,
-        })
-    }
-
-    pub fn encode(&self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
-        buf.with_u16_length(|buf| {
-            for &a in &self.supported_signature_algorithms {
-                buf.push_u16(a.as_u16())
-                    .map_err(|_| TlsError::EncodeError)?;
-            }
-            Ok(())
-        })
+impl PartialEq for SignatureAlgorithms<'_, Remote> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
     }
 }

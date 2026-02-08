@@ -2,6 +2,7 @@ use crate::{
     TlsError,
     buffer::CryptoBuffer,
     parse_buffer::{ParseBuffer, ParseError},
+    parse_encode::{Encode, Parse},
 };
 
 /// Maximum plaintext fragment length
@@ -24,8 +25,8 @@ pub enum MaxFragmentLength {
     Bits12 = 4,
 }
 
-impl MaxFragmentLength {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+impl Parse<'_> for MaxFragmentLength {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
         match buf.read_u8()? {
             1 => Ok(Self::Bits9),
             2 => Ok(Self::Bits10),
@@ -37,8 +38,9 @@ impl MaxFragmentLength {
             }
         }
     }
-
-    pub fn encode(&self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
-        buf.push(*self as u8).map_err(|_| TlsError::EncodeError)
+}
+impl Encode for MaxFragmentLength {
+    fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
+        buf.push(self as u8).map_err(|_| TlsError::EncodeError)
     }
 }

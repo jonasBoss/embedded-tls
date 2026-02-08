@@ -1,6 +1,7 @@
 use crate::TlsError;
 use crate::extensions::extension_data::signature_algorithms::SignatureScheme;
 use crate::parse_buffer::ParseBuffer;
+use crate::parse_encode::Parse;
 
 use super::CryptoBuffer;
 

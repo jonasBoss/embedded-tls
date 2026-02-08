@@ -1,10 +1,8 @@
-use heapless::Vec;
-
 use crate::{
     TlsError,
     buffer::CryptoBuffer,
-    extensions::ExtensionType,
     parse_buffer::{ParseBuffer, ParseError},
+    parse_encode::{Encode, Parse, parse_encode_list},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,7 +35,16 @@ pub struct ServerName<'a> {
 }
 
 impl<'a> ServerName<'a> {
-    pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<ServerName<'a>, ParseError> {
+    pub fn hostname(name: &'a str) -> Self {
+        Self {
+            name_type: NameType::HostName,
+            name,
+        }
+    }
+}
+
+impl<'a> Parse<'a> for ServerName<'a> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<ServerName<'a>, ParseError> {
         let name_type = NameType::parse(buf)?;
         let name_len = buf.read_u16()?;
         let name = buf.slice(name_len as usize)?.as_slice();
@@ -54,8 +61,9 @@ impl<'a> ServerName<'a> {
             Err(ParseError::InvalidData)
         }
     }
-
-    pub fn encode(&self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
+}
+impl Encode for ServerName<'_> {
+    fn encode(self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
         self.name_type.encode(buf)?;
 
         buf.with_u16_length(|buf| buf.extend_from_slice(self.name.as_bytes()))
@@ -63,49 +71,7 @@ impl<'a> ServerName<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct ServerNameList<'a, const N: usize> {
-    pub names: Vec<ServerName<'a>, N>,
-}
-
-impl<'a> ServerNameList<'a, 1> {
-    pub fn single(server_name: &'a str) -> Self {
-        let mut names = Vec::<_, 1>::new();
-
-        names
-            .push(ServerName {
-                name_type: NameType::HostName,
-                name: server_name,
-            })
-            .unwrap();
-
-        ServerNameList { names }
-    }
-}
-
-impl<'a, const N: usize> ServerNameList<'a, N> {
-    #[allow(dead_code)]
-    pub const EXTENSION_TYPE: ExtensionType = ExtensionType::ServerName;
-
-    pub fn parse(buf: &mut ParseBuffer<'a>) -> Result<ServerNameList<'a, N>, ParseError> {
-        let data_length = buf.read_u16()? as usize;
-
-        Ok(Self {
-            names: buf.read_list::<_, N>(data_length, ServerName::parse)?,
-        })
-    }
-
-    pub fn encode(&self, buf: &mut CryptoBuffer) -> Result<(), TlsError> {
-        buf.with_u16_length(|buf| {
-            for name in &self.names {
-                name.encode(buf)?;
-            }
-
-            Ok(())
-        })
-    }
-}
+parse_encode_list!(ServerNameList<'a, Location>(ServerName<'a>));
 
 // RFC 6066, Section 3.  Server Name Indication
 // A server that receives a client hello containing the "server_name"
@@ -117,17 +83,19 @@ impl<'a, const N: usize> ServerNameList<'a, N> {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ServerNameResponse;
 
-impl ServerNameResponse {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+impl Parse<'_> for ServerNameResponse {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
         if buf.is_empty() {
             Ok(Self)
         } else {
             Err(ParseError::InvalidData)
         }
     }
+}
 
+impl Encode for ServerNameResponse {
     #[allow(clippy::unused_self, clippy::unnecessary_wraps)]
-    pub fn encode(&self, _buf: &mut CryptoBuffer) -> Result<(), TlsError> {
+    fn encode(self, _buf: &mut CryptoBuffer) -> Result<(), TlsError> {
         Ok(())
     }
 }
