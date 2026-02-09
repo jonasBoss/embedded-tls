@@ -64,6 +64,7 @@ impl<'a> Parse<'a> for Binders<'a, Remote> {
 }
 
 impl<'a> Binders<'a, Remote> {
+    #[allow(unused)] // todo: this will be required for the server
     pub fn iter(&self) -> impl Iterator<Item = &'a [u8]> {
         self.0.iter().map(|s| s.0)
     }

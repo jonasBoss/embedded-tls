@@ -222,12 +222,14 @@ macro_rules! parse_encode_list {
             }
         }
 
+        #[allow(unused)]
         impl<'a> $name<'a, $crate::parse_encode::Local> {
             pub fn new(iter: &'a mut dyn Iterator<Item = $item>) -> Self {
                 Self(<$crate::parse_encode::Local as $crate::parse_encode::StorageType>::ListType::new(iter))
             }
         }
 
+        #[allow(unused)]
         impl<'a> $name<'a, $crate::parse_encode::Remote> {
             pub fn iter(&self) -> impl Iterator<Item = $item> {
                 self.0.iter()

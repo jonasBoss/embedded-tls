@@ -57,6 +57,7 @@ macro_rules! extension_group {
         impl< $($lt,)? $($loc)? > $name< $($lt,)? $($loc)? >
         where $( $wt : $trait ),*
         {
+            #[allow(unused)]
             pub fn extension_type(&self) -> $crate::extensions::ExtensionType {
                 match self {
                     $(Self::$extension(_) => $crate::extensions::ExtensionType::$extension),*
@@ -64,6 +65,7 @@ macro_rules! extension_group {
             }
         }
 
+        #[allow(unused)]
         impl$(< $lt >)? $name< $($lt,)? $($local)? > {
             pub fn encode(self, buf: &mut $crate::buffer::CryptoBuffer) -> Result<(), $crate::TlsError> {
                 self.extension_type().encode(buf)?;
@@ -74,6 +76,7 @@ macro_rules! extension_group {
             }
         }
 
+        #[allow(unused)] // not all types will be parsed
         impl$(< $lt >)? $name< $($lt,)? $($remote)? > {
             pub fn parse(buf: &mut $crate::parse_buffer::ParseBuffer$(< $lt >)?) -> Result<Self, $crate::TlsError>{
                // Consume extension data even if we don't recognize the extension
