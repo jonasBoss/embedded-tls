@@ -2,7 +2,7 @@ use crate::buffer::CryptoBuffer;
 use crate::extensions::extension_data::supported_groups::NamedGroup;
 
 use crate::TlsError;
-use crate::parse_buffer::{ParseBuffer, ParseError};
+use crate::parse_buffer::ParseBuffer;
 use crate::parse_encode::{Encode, Parse, parse_encode_list};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -10,7 +10,7 @@ use crate::parse_encode::{Encode, Parse, parse_encode_list};
 pub struct KeyShareServerHello<'a>(pub KeyShareEntry<'a>);
 
 impl<'a> Parse<'a> for KeyShareServerHello<'a> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         Ok(KeyShareServerHello(KeyShareEntry::parse(buf)?))
     }
 }
@@ -30,7 +30,7 @@ pub struct KeyShareHelloRetryRequest {
 
 #[allow(dead_code)]
 impl KeyShareHelloRetryRequest {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         Ok(Self {
             selected_group: NamedGroup::parse(buf)?,
         })
@@ -49,7 +49,7 @@ pub struct KeyShareEntry<'a> {
 }
 
 impl<'a> Parse<'a> for KeyShareEntry<'a> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         let group = NamedGroup::parse(buf)?;
 
         let opaque_len = buf.read_u16()?;

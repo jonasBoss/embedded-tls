@@ -55,7 +55,7 @@ pub enum SignatureScheme {
 }
 
 impl Parse<'_> for SignatureScheme {
-    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         match buf.read_u16()? {
             0x0401 => Ok(Self::RsaPkcs1Sha256),
             0x0501 => Ok(Self::RsaPkcs1Sha384),
@@ -91,7 +91,7 @@ impl Parse<'_> for SignatureScheme {
             0x0905 => Ok(Self::MlDsa65),
             0x0906 => Ok(Self::MlDsa87),
 
-            _ => Err(ParseError::InvalidData),
+            _ => Err(ParseError::InvalidData.into()),
         }
     }
 }

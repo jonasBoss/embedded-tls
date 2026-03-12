@@ -1,15 +1,11 @@
-use crate::{
-    TlsError,
-    buffer::CryptoBuffer,
-    parse_buffer::{ParseBuffer, ParseError},
-};
+use crate::{TlsError, buffer::CryptoBuffer, parse_buffer::ParseBuffer};
 use core::convert::identity;
 use core::fmt::Debug;
 use core::iter;
 use std::marker::PhantomData;
 
 pub trait Parse<'a>: Sized {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError>;
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError>;
 }
 
 pub trait Encode {
@@ -19,8 +15,8 @@ pub trait Encode {
 macro_rules! int_p_e {
     ($t:ty, $parse:tt, $encode:tt) => {
         impl<'a> Parse<'a> for $t {
-            fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
-                buf.$parse()
+            fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
+                buf.$parse().map_err(From::from)
             }
         }
         impl Encode for $t {
@@ -40,7 +36,7 @@ int_p_e!(u32, read_u32, push_u32);
 pub struct SliceU8<'a>(pub &'a [u8]);
 
 impl<'a> Parse<'a> for SliceU8<'a> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         let len = buf.read_u8()? as usize;
         Ok(Self(buf.slice(len)?.as_slice()))
     }
@@ -100,7 +96,7 @@ impl<'a, U: Parse<'a> + FormatBounds> ZerocopyList<'a, U> {
 }
 
 impl<'a, U: Parse<'a> + FormatBounds> Parse<'a> for ZerocopyList<'a, U> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         let data = buf.as_slice();
         // this is only run to validate the data,
         iter::from_fn(|| {
@@ -209,7 +205,7 @@ macro_rules! parse_encode_list {
         impl<'a> $crate::parse_encode::Parse<'a> for $name<'a, $crate::parse_encode::Remote> {
             fn parse(
                 buf: &mut $crate::parse_buffer::ParseBuffer<'a>,
-            ) -> Result<Self, $crate::parse_buffer::ParseError> {
+            ) -> Result<Self, $crate::TlsError> {
                 let len = parse_encode_list!(@read $len, buf)? as usize;
                 let mut buf = buf.slice(len)?;
                 <$crate::parse_encode::Remote as $crate::parse_encode::StorageType>::ListType::parse(&mut buf).map(Self)

@@ -26,7 +26,7 @@ pub enum MaxFragmentLength {
 }
 
 impl Parse<'_> for MaxFragmentLength {
-    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         match buf.read_u8()? {
             1 => Ok(Self::Bits9),
             2 => Ok(Self::Bits10),
@@ -34,7 +34,7 @@ impl Parse<'_> for MaxFragmentLength {
             4 => Ok(Self::Bits12),
             other => {
                 warn!("Read unknown MaxFragmentLength: {}", other);
-                Err(ParseError::InvalidData)
+                Err(ParseError::InvalidData.into())
             }
         }
     }

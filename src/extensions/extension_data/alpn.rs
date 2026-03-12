@@ -1,7 +1,7 @@
 use crate::{
     TlsError,
     buffer::CryptoBuffer,
-    parse_buffer::{ParseBuffer, ParseError},
+    parse_buffer::ParseBuffer,
     parse_encode::{Encode, Parse, parse_encode_list},
 };
 
@@ -22,7 +22,7 @@ pub struct ProtocolName<'a>(pub &'a [u8]);
 parse_encode_list!(ProtocolNameList<'a, Location>(ProtocolName<'a>));
 
 impl<'a> Parse<'a> for ProtocolName<'a> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         let len = buf.read_u8()? as usize;
         let name = buf.slice(len)?.as_slice();
         Ok(Self(name))

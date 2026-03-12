@@ -29,7 +29,7 @@ pub enum NamedGroup {
 }
 
 impl Parse<'_> for NamedGroup {
-    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         match buf.read_u16()? {
             0x0017 => Ok(Self::Secp256r1),
             0x0018 => Ok(Self::Secp384r1),
@@ -47,7 +47,7 @@ impl Parse<'_> for NamedGroup {
             0x11EC => Ok(Self::X25519MLKEM768),
             0x11ED => Ok(Self::SecP384r1MLKEM1024),
 
-            _ => Err(ParseError::InvalidData),
+            _ => Err(ParseError::InvalidData.into()),
         }
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     TlsError,
     buffer::CryptoBuffer,
-    parse_buffer::{ParseBuffer, ParseError},
+    parse_buffer::ParseBuffer,
     parse_encode::{Encode, Parse},
 };
 
@@ -12,7 +12,7 @@ pub struct Unimplemented<'a> {
 }
 
 impl<'a> Parse<'a> for Unimplemented<'a> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         Ok(Self {
             data: buf.as_slice(),
         })

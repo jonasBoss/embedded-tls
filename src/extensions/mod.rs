@@ -1,8 +1,4 @@
-use crate::{
-    TlsError,
-    buffer::CryptoBuffer,
-    parse_buffer::{ParseBuffer, ParseError},
-};
+use crate::{TlsError, buffer::CryptoBuffer, parse_buffer::ParseBuffer};
 
 mod extension_group_macro;
 
@@ -38,8 +34,11 @@ pub enum ExtensionType {
 }
 
 impl ExtensionType {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
-        match buf.read_u16()? {
+    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
+        match buf.read_u16().map_err(|err| {
+            warn!("Failed to read extension type: {:?}", err);
+            TlsError::DecodeError
+        })? {
             v if v == Self::ServerName as u16 => Ok(Self::ServerName),
             v if v == Self::MaxFragmentLength as u16 => Ok(Self::MaxFragmentLength),
             v if v == Self::StatusRequest as u16 => Ok(Self::StatusRequest),
@@ -69,7 +68,7 @@ impl ExtensionType {
             v if v == Self::KeyShare as u16 => Ok(Self::KeyShare),
             other => {
                 warn!("Read unknown ExtensionType: {}", other);
-                Err(ParseError::InvalidData)
+                Err(TlsError::UnknownExtensionType)
             }
         }
     }

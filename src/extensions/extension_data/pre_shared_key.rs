@@ -24,7 +24,7 @@ impl<'a> PskIdentity<'a> {
 }
 
 impl<'a> Parse<'a> for PskIdentity<'a> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         let len = buf.read_u16()? as usize;
         Ok(Self {
             identity: buf.slice(len)?.as_slice(),
@@ -56,7 +56,7 @@ where
     Location: StorageType;
 
 impl<'a> Parse<'a> for Binders<'a, Remote> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         let len = buf.read_u16()? as usize;
         let mut buf = buf.slice(len)?;
         Ok(Self(ZerocopyList::parse(&mut buf)?))
@@ -106,7 +106,7 @@ where
 }
 
 impl<'a> Parse<'a> for PreSharedKeyClientHello<'a, Remote> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<Self, TlsError> {
         let len = buf.read_u16()? as usize;
         let mut ident_buf = buf.slice(len)?;
         let len = buf.read_u16()? as usize;
@@ -118,7 +118,7 @@ impl<'a> Parse<'a> for PreSharedKeyClientHello<'a, Remote> {
         if this.binders.len() == this.identities.len() {
             Ok(this)
         } else {
-            Err(ParseError::InvalidData)
+            Err(ParseError::InvalidData.into())
         }
     }
 }
@@ -141,7 +141,7 @@ pub struct PreSharedKeyServerHello {
 }
 
 impl Parse<'_> for PreSharedKeyServerHello {
-    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         Ok(Self {
             selected_identity: buf.read_u16()?,
         })

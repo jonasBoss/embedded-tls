@@ -1,4 +1,7 @@
-use crate::parse_buffer::{ParseBuffer, ParseError};
+use crate::{
+    TlsError,
+    parse_buffer::{ParseBuffer, ParseError},
+};
 
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -12,7 +15,7 @@ pub enum CipherSuite {
 }
 
 impl CipherSuite {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         match buf.read_u16()? {
             v if v == Self::TlsAes128GcmSha256 as u16 => Ok(Self::TlsAes128GcmSha256),
             v if v == Self::TlsAes256GcmSha384 as u16 => Ok(Self::TlsAes256GcmSha384),
@@ -20,7 +23,7 @@ impl CipherSuite {
             v if v == Self::TlsAes128CcmSha256 as u16 => Ok(Self::TlsAes128CcmSha256),
             v if v == Self::TlsAes128Ccm8Sha256 as u16 => Ok(Self::TlsAes128Ccm8Sha256),
             v if v == Self::TlsPskAes128GcmSha256 as u16 => Ok(Self::TlsPskAes128GcmSha256),
-            _ => Err(ParseError::InvalidData),
+            _ => Err(ParseError::InvalidData.into()),
         }
     }
 }

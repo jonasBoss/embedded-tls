@@ -12,12 +12,12 @@ pub enum NameType {
 }
 
 impl NameType {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         match buf.read_u8()? {
             0 => Ok(Self::HostName),
             other => {
                 warn!("Read unknown NameType: {}", other);
-                Err(ParseError::InvalidData)
+                Err(ParseError::InvalidData.into())
             }
         }
     }
@@ -44,7 +44,7 @@ impl<'a> ServerName<'a> {
 }
 
 impl<'a> Parse<'a> for ServerName<'a> {
-    fn parse(buf: &mut ParseBuffer<'a>) -> Result<ServerName<'a>, ParseError> {
+    fn parse(buf: &mut ParseBuffer<'a>) -> Result<ServerName<'a>, TlsError> {
         let name_type = NameType::parse(buf)?;
         let name_len = buf.read_u16()?;
         let name = buf.slice(name_len as usize)?.as_slice();
@@ -58,7 +58,7 @@ impl<'a> Parse<'a> for ServerName<'a> {
                 name: core::str::from_utf8(name).map_err(|_| ParseError::InvalidData)?,
             })
         } else {
-            Err(ParseError::InvalidData)
+            Err(ParseError::InvalidData.into())
         }
     }
 }
@@ -84,11 +84,11 @@ parse_encode_list!(ServerNameList<'a, Location>(ServerName<'a>));
 pub struct ServerNameResponse;
 
 impl Parse<'_> for ServerNameResponse {
-    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         if buf.is_empty() {
             Ok(Self)
         } else {
-            Err(ParseError::InvalidData)
+            Err(ParseError::InvalidData.into())
         }
     }
 }

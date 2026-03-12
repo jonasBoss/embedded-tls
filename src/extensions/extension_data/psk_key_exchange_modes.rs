@@ -11,13 +11,13 @@ pub enum PskKeyExchangeMode {
     PskDheKe = 1,
 }
 impl Parse<'_> for PskKeyExchangeMode {
-    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         match buf.read_u8()? {
             0 => Ok(Self::PskKe),
             1 => Ok(Self::PskDheKe),
             other => {
                 warn!("Read unknown PskKeyExchangeMode: {}", other);
-                Err(ParseError::InvalidData)
+                Err(ParseError::InvalidData.into())
             }
         }
     }

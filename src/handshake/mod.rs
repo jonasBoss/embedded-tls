@@ -10,7 +10,7 @@ use crate::handshake::finished::Finished;
 use crate::handshake::new_session_ticket::NewSessionTicket;
 use crate::handshake::server_hello::ServerHello;
 use crate::key_schedule::HashOutputSize;
-use crate::parse_buffer::{ParseBuffer, ParseError};
+use crate::parse_buffer::ParseBuffer;
 use crate::{buffer::CryptoBuffer, key_schedule::WriteKeySchedule};
 use core::fmt::{Debug, Formatter};
 use sha2::Digest;
@@ -46,7 +46,7 @@ pub enum HandshakeType {
 }
 
 impl HandshakeType {
-    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    pub fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         match buf.read_u8()? {
             1 => Ok(HandshakeType::ClientHello),
             2 => Ok(HandshakeType::ServerHello),
@@ -59,7 +59,13 @@ impl HandshakeType {
             20 => Ok(HandshakeType::Finished),
             24 => Ok(HandshakeType::KeyUpdate),
             254 => Ok(HandshakeType::MessageHash),
-            _ => Err(ParseError::InvalidData),
+            nr => {
+                warn!("Unexpected handshake type: {:x?}", nr);
+                Err(TlsError::AbortHandshake(
+                    crate::alert::AlertLevel::Fatal,
+                    crate::alert::AlertDescription::UnexpectedMessage,
+                ))
+            }
         }
     }
 }

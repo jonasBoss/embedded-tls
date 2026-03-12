@@ -161,21 +161,21 @@ macro_rules! extension_group {
 
         impl < $($lt)? > $crate::parse_encode::Parse< $($lt)? > for $name< $($lt)? $(, $remote)? >
         {
-            fn parse(buf: &mut $crate::parse_buffer::ParseBuffer< $($lt)? >) -> Result<Self, $crate::parse_buffer::ParseError> {
+            fn parse(buf: &mut $crate::parse_buffer::ParseBuffer< $($lt)? >) -> Result<Self, $crate::TlsError> {
                 $( let mut $field = None;)*
 
                 let len = buf.read_u16()? as usize;
                 let mut buf = buf.slice(len)?;
 
                 while buf.remaining() > 0 {
-                    let ext_type = $crate::extensions::ExtensionType::parse(&mut buf);
+                    let extension_type = $crate::extensions::ExtensionType::parse(&mut buf);
                     let ext_len = buf.read_u16()? as usize;
                     let mut ext_data = buf.slice(ext_len)?;
 
-                    let ext_type = match ext_type.inspect_err(|e| warn!("Failed to read extension type: {:?}", e)) {
+                    let ext_type = match extension_type {
                         Ok(ext_type) => ext_type,
-                        Err($crate::parse_buffer::ParseError::InvalidData) => continue,
-                        Err(e) => return Err(e),
+                        Err($crate::TlsError::AbortHandshake(_, _)) => extension_type?,
+                        Err(_) => continue,
                     };
 
                     debug!("Read extension type {:?}", ext_type);
@@ -185,7 +185,11 @@ macro_rules! extension_group {
                         $(
                             $crate::extensions::ExtensionType::$ext => {
                                 if $field.is_some() {
-                                    return Err($crate::parse_buffer::ParseError::InvalidData);
+                                    warn!("Duplicate extension: `{}`", stringify!($ext));
+                                    return Err($crate::TlsError::AbortHandshake(
+                                        $crate::alert::AlertLevel::Fatal,
+                                        $crate::alert::AlertDescription::IllegalParameter
+                                    ));
                                 }
                                 $field = Some(
                                     $ext::parse(&mut ext_data)
@@ -201,7 +205,10 @@ macro_rules! extension_group {
                             // which it recognizes and which is not specified for the message in
                             // which it appears, it MUST abort the handshake with an
                             // "illegal_parameter" alert.
-                            return Err($crate::parse_buffer::ParseError::InvalidData); // TODO: abort handshake error
+                            return Err($crate::TlsError::AbortHandshake(
+                                $crate::alert::AlertLevel::Fatal,
+                                $crate::alert::AlertDescription::IllegalParameter
+                            ));
                         }
                     };
                 }
@@ -209,7 +216,10 @@ macro_rules! extension_group {
                     $(
                         $field : $crate::extensions::extension_group_macro::MaybeOk::maybe_ok_or(
                             $field,
-                            $crate::parse_buffer::ParseError::InvalidData
+                            $crate::TlsError::AbortHandshake(
+                                $crate::alert::AlertLevel::Fatal,
+                                $crate::alert::AlertDescription::MissingExtension
+                            )
                         )?,
                     )*
                 })

@@ -1,7 +1,7 @@
 use crate::{
     TlsError,
     buffer::CryptoBuffer,
-    parse_buffer::{ParseBuffer, ParseError},
+    parse_buffer::ParseBuffer,
     parse_encode::{Encode, Parse, parse_encode_list},
 };
 
@@ -15,8 +15,8 @@ impl Encode for ProtocolVersion {
     }
 }
 impl Parse<'_> for ProtocolVersion {
-    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
-        buf.read_u16().map(Self)
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
+        buf.read_u16().map(Self).map_err(From::from)
     }
 }
 
@@ -31,7 +31,7 @@ pub struct SupportedVersionsServerHello {
 }
 
 impl Parse<'_> for SupportedVersionsServerHello {
-    fn parse(buf: &mut ParseBuffer) -> Result<Self, ParseError> {
+    fn parse(buf: &mut ParseBuffer) -> Result<Self, TlsError> {
         Ok(Self {
             selected_version: ProtocolVersion::parse(buf)?,
         })
