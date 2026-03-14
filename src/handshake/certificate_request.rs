@@ -1,5 +1,6 @@
 use crate::extensions::messages::CertificateRequestExtension;
 use crate::parse_buffer::ParseBuffer;
+use crate::parse_encode::Parse;
 use crate::{TlsError, unused};
 use heapless::Vec;
 
@@ -19,7 +20,7 @@ impl<'a> CertificateRequestRef<'a> {
             .map_err(|_| TlsError::InvalidCertificateRequest)?;
 
         // Validate extensions
-        let extensions = CertificateRequestExtension::parse_vector::<6>(buf)?;
+        let extensions = CertificateRequestExtension::parse(buf)?;
 
         unused(extensions);
         Ok(Self {

@@ -1,10 +1,9 @@
-use heapless::Vec;
-
 use crate::cipher_suites::CipherSuite;
 use crate::crypto_engine::CryptoEngine;
 use crate::extensions::extension_data::key_share::KeyShareEntry;
 use crate::extensions::messages::ServerHelloExtension;
 use crate::parse_buffer::ParseBuffer;
+use crate::parse_encode::Parse;
 use crate::{TlsError, unused};
 use p256::PublicKey;
 use p256::ecdh::{EphemeralSecret, SharedSecret};
@@ -12,7 +11,7 @@ use p256::ecdh::{EphemeralSecret, SharedSecret};
 #[derive(Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ServerHello<'a> {
-    extensions: Vec<ServerHelloExtension<'a>, 4>,
+    extensions: ServerHelloExtension<'a>,
 }
 
 impl<'a> ServerHello<'a> {
@@ -42,7 +41,7 @@ impl<'a> ServerHello<'a> {
         // skip compression method, it's 0.
         buf.read_u8()?;
 
-        let extensions = ServerHelloExtension::parse_vector(buf)?;
+        let extensions = ServerHelloExtension::parse(buf)?;
 
         // debug!("server random {:x}", random);
         // debug!("server session-id {:x}", session_id.as_slice());
@@ -54,13 +53,7 @@ impl<'a> ServerHello<'a> {
     }
 
     pub fn key_share(&self) -> Option<&KeyShareEntry<'_>> {
-        self.extensions.iter().find_map(|e| {
-            if let ServerHelloExtension::KeyShare(entry) = e {
-                Some(&entry.0)
-            } else {
-                None
-            }
-        })
+        self.extensions.key_share.as_ref().map(|share| &share.0)
     }
 
     pub fn calculate_shared_secret(&self, secret: &EphemeralSecret) -> Option<SharedSecret> {

@@ -1,150 +1,231 @@
+/// simple helper trait that allows us to convert `Option<T>` to `Result<T>` or  `Result<Option<T>>` with a call to `maybe_ok_or`
+/// the `Result<Option<T>>` will never error
+pub trait MaybeOk<R> {
+    fn maybe_ok_or<E>(self, err: E) -> Result<R, E>;
+}
+impl<R> MaybeOk<Option<R>> for Option<R> {
+    fn maybe_ok_or<E>(self, _: E) -> Result<Option<R>, E> {
+        Ok(self)
+    }
+}
+impl<R> MaybeOk<R> for Option<R> {
+    fn maybe_ok_or<E>(self, err: E) -> Result<R, E> {
+        self.ok_or(err)
+    }
+}
+
+pub trait ExtensionEncode {
+    fn extension_encode(self, buf: &mut CryptoBuffer, ext: ExtensionType) -> Result<(), TlsError>;
+}
+impl<T: Encode> ExtensionEncode for T {
+    fn extension_encode(self, buf: &mut CryptoBuffer, ext: ExtensionType) -> Result<(), TlsError> {
+        ext.encode(buf)?;
+        buf.with_u16_length(|buf| self.encode(buf))
+    }
+}
+impl<T: Encode> ExtensionEncode for Option<T> {
+    fn extension_encode(self, buf: &mut CryptoBuffer, ext: ExtensionType) -> Result<(), TlsError> {
+        let _ = self
+            .map(|t| {
+                ext.encode(buf)?;
+                buf.with_u16_length(|buf| t.encode(buf))
+            })
+            .transpose()?;
+        Ok(())
+    }
+}
+
 macro_rules! extension_group {
-    // macro entry
-    (pub enum $name:ident $( < $lt:lifetime > )? {
-        $(
-            $extension:ident($extension_data:ident$(<$($ext_gen:tt),*>)? )
-        ),* $(,)?
-    }) => {
+
+    // entry without a `Location` generic
+    (
+        $(#[$attr:meta])*
+        pub struct $name:ident $( < $lt:lifetime > )? {
+            $( $body:tt )*
+        }
+    )
+    => {
         extension_group!(
-            @enum_name $name,
-            @lifetime $($lt)?,
-            @location ,
-            @remote ,
-            @local ,
-            @where_bound ,
-            @extension $($extension),*,
-            @ext_data $($extension_data),*,
-            @ext_gene $($(< $($ext_gen),* >)?),*
+            [
+                @name $name,
+                @lifetime $($lt)?,
+                @location ,
+                @remote ,
+                @local ,
+                @where_bound ,
+                @attr $($attr)*,
+                @body { $( $body )* },
+            ],
+            @extensions {},
+            @to_parse $( $body )*
         );
     };
-    (pub enum $name:ident<$lt:lifetime, Location> {
-        $(
-            $extension:ident($extension_data:ident$(<$($ext_gen:tt),*>)? )
-        ),* $(,)?
-    }) => {
-        extension_group!(
-            @enum_name $name,
-            @lifetime $lt,
-            @location Location,
-            @remote $crate::parse_encode::Remote,
-            @local $crate::parse_encode::Local,
-            @where_bound Location : $crate::parse_encode::StorageType,
-            @extension $($extension),*,
-            @ext_data $($extension_data),*,
-            @ext_gene $($(< $($ext_gen),* >)?),*
-        );
-    };    // step 1a create where bound
-    // step 2 impl
+    // entry with a `Location` generic
     (
-        @enum_name $name:ident,
-        @lifetime $($lt:lifetime)?,
-        @location $($loc:ident)?,
-        @remote $($remote:path)?,
-        @local $($local:path)?,
-        @where_bound $( $wt:ty : $trait:path ),*,
-        @extension $($extension:ident),*,
-        @ext_data $($extension_data:ident),*,
-        @ext_gene $($(< $($ext_gen:tt),* >)?),*
+        $(#[$attr:meta])*
+        pub struct $name:ident < $lt:lifetime, Location > {
+            $( $body:tt )*
+        }
+    )
+    => {
+        extension_group!(
+            [
+                @name $name,
+                @lifetime $lt,
+                @location Location,
+                @remote $crate::parse_encode::Remote,
+                @local $crate::parse_encode::Local,
+                @where_bound Location : $crate::parse_encode::StorageType,
+                @attr $($attr)*,
+                @body { $( $body )* },
+            ],
+            @extensions {},
+            @to_parse $( $body )*
+        );
+    };
+
+    // process a optional extension
+    (
+        [ $($data:tt)* ], // this matches @name, @lifetime, ...
+        @extensions { $( $extensions:ident )* },
+        @to_parse $(#[$meta:meta])* $vis:vis $_:ident : Option<$ext:ident<$($inner:tt),*>> $(, $($rest:tt)*)?
     ) => {
-        #[derive(Debug, Clone)]
-        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-        #[allow(dead_code)] // extension_data may not be used
-        pub enum $name< $($lt,)? $($loc)? >
-        where $( $wt : $trait ),*
-            {$($extension($extension_data $(< $($ext_gen),* >)? )),*}
+        extension_group!(
+            [ $( $data )* ],
+            @extensions { $($extensions)* $ext },
+            @to_parse $($($rest)*)?
+        );
+    };
 
+    // process a optional extension without generics
+    (
+        [ $($data:tt)* ], // this matches @name, @lifetime, ...
+        @extensions { $( $extensions:ident )* },
+        @to_parse $(#[$meta:meta])* $vis:vis $_:ident : Option<$ext:ident> $(, $($rest:tt)*)?
+    ) => {
+        extension_group!(
+            [ $( $data )* ],
+            @extensions { $($extensions)* $ext },
+            @to_parse $($($rest)*)?
+        );
+    };
 
-        impl< $($lt,)? $($loc)? > $name< $($lt,)? $($loc)? >
-        where $( $wt : $trait ),*
+    // process a mandatory extension
+    (
+        [ $($data:tt)* ], // this matches @name, @lifetime, ...
+        @extensions { $( $extensions:ident )* },
+        @to_parse $(#[$meta:meta])* $vis:vis $_:ident : $ext:ident<$($inner:tt),*> $(, $($rest:tt)*)?
+    ) => {
+        extension_group!(
+            [ $( $data )* ],
+            @extensions { $($extensions)* $ext },
+            @to_parse $($($rest)*)?
+        );
+    };
+
+    // process a mandatory extension without generics
+    (
+        [ $($data:tt)* ], // this matches @name, @lifetime, ...
+        @extensions { $( $extensions:ident )* },
+        @to_parse $(#[$meta:meta])* $vis:vis $_:ident : $ext:ident $(, $($rest:tt)*)?
+    ) => {
+        extension_group!(
+            [ $( $data )* ],
+            @extensions { $($extensions)* $ext },
+            @to_parse $($($rest)*)?
+        );
+    };
+
+    // final step, code generation
+    (
+        [
+            @name $name:ident,
+            @lifetime $($lt:lifetime)?,
+            @location $($loc:ident)?,
+            @remote $($remote:path)?,
+            @local $($local:path)?,
+            @where_bound $( $wt:ty : $trait:path ),*,
+            @attr $($attr:meta)*,
+            @body { $( $(#[$_:meta])* $vis:vis $field:ident : $f_type:ty ),* $(,)? },
+        ],
+        @extensions { $($ext:ident)* },
+        @to_parse //empty
+    ) => {
+
+        $(#[$attr])*
+        pub struct $name< $($lt)? $(, $loc)? >
+        where $( $wt : $trait),*
         {
-            #[allow(unused)]
-            pub fn extension_type(&self) -> $crate::extensions::ExtensionType {
-                match self {
-                    $(Self::$extension(_) => $crate::extensions::ExtensionType::$extension),*
-                }
-            }
+            $( $vis $field : $f_type ),*
         }
 
-        #[allow(unused)]
-        impl$(< $lt >)? $name< $($lt,)? $($local)? > {
-            pub fn encode(self, buf: &mut $crate::buffer::CryptoBuffer) -> Result<(), $crate::TlsError> {
-                self.extension_type().encode(buf)?;
+        impl < $($lt)? > $crate::parse_encode::Parse< $($lt)? > for $name< $($lt)? $(, $remote)? >
+        {
+            fn parse(buf: &mut $crate::parse_buffer::ParseBuffer< $($lt)? >) -> Result<Self, $crate::parse_buffer::ParseError> {
+                $( let mut $field = None;)*
 
-                buf.with_u16_length(|buf| match self {
-                    $(Self::$extension(ext_data) =>  $crate::parse_encode::Encode::encode(ext_data, buf)),*
+                let len = buf.read_u16()? as usize;
+                let mut buf = buf.slice(len)?;
+
+                while buf.remaining() > 0 {
+                    let ext_type = $crate::extensions::ExtensionType::parse(&mut buf);
+                    let ext_len = buf.read_u16()? as usize;
+                    let mut ext_data = buf.slice(ext_len)?;
+
+                    let ext_type = match ext_type.inspect_err(|e| warn!("Failed to read extension type: {:?}", e)) {
+                        Ok(ext_type) => ext_type,
+                        Err($crate::parse_buffer::ParseError::InvalidData) => continue,
+                        Err(e) => return Err(e),
+                    };
+
+                    debug!("Read extension type {:?}", ext_type);
+                    trace!("Extension data length: {}", ext_len);
+
+                    match ext_type {
+                        $(
+                            $crate::extensions::ExtensionType::$ext => {
+                                if $field.is_some() {
+                                    return Err($crate::parse_buffer::ParseError::InvalidData);
+                                }
+                                $field = Some(
+                                    $ext::parse(&mut ext_data)
+                                    .inspect_err(|e|warn!("Failed to parse extension data: {:?}", e))?
+                                );
+                            }
+                        )*
+                        #[allow(unreachable_patterns)]
+                        other => {
+                            warn!("Read unexpected ExtensionType: {:?}", other);
+                            // Section 4.2.  Extensions
+                            // If an implementation receives an extension
+                            // which it recognizes and which is not specified for the message in
+                            // which it appears, it MUST abort the handshake with an
+                            // "illegal_parameter" alert.
+                            return Err($crate::parse_buffer::ParseError::InvalidData); // TODO: abort handshake error
+                        }
+                    };
+                }
+                Ok(Self {
+                    $(
+                        $field : $crate::extensions::extension_group_macro::MaybeOk::maybe_ok_or(
+                            $field,
+                            $crate::parse_buffer::ParseError::InvalidData
+                        )?,
+                    )*
                 })
             }
         }
 
-        #[allow(unused)] // not all types will be parsed
-        impl$(< $lt >)? $name< $($lt,)? $($remote)? > {
-            pub fn parse(buf: &mut $crate::parse_buffer::ParseBuffer$(< $lt >)?) -> Result<Self, $crate::TlsError>{
-               // Consume extension data even if we don't recognize the extension
-                let extension_type = crate::extensions::ExtensionType::parse(buf);
-                let data_len = buf.read_u16().map_err(|_| crate::TlsError::DecodeError)? as usize;
-                let mut ext_data = buf.slice(data_len).map_err(|_| crate::TlsError::DecodeError)?;
-
-                let ext_type = extension_type.map_err(|err| {
-                    warn!("Failed to read extension type: {:?}", err);
-                    match err {
-                        crate::parse_buffer::ParseError::InvalidData => crate::TlsError::UnknownExtensionType,
-                        _ => crate::TlsError::DecodeError,
-                    }
-                })?;
-
-                debug!("Read extension type {:?}", ext_type);
-                trace!("Extension data length: {}", data_len);
-
-                match ext_type {
-                    $(crate::extensions::ExtensionType::$extension => Ok(Self::$extension($crate::parse_encode::Parse::parse(&mut ext_data).map_err(|err| {
-                        warn!("Failed to parse extension data: {:?}", err);
-                        crate::TlsError::DecodeError
-                    })?)),)+
-
-                    #[allow(unreachable_patterns)]
-                    other => {
-                        warn!("Read unexpected ExtensionType: {:?}", other);
-                        // Section 4.2.  Extensions
-                        // If an implementation receives an extension
-                        // which it recognizes and which is not specified for the message in
-                        // which it appears, it MUST abort the handshake with an
-                        // "illegal_parameter" alert.
-                        Err(crate::TlsError::AbortHandshake(
-                            crate::alert::AlertLevel::Fatal,
-                            crate::alert::AlertDescription::IllegalParameter,
-                        ))
-                    }
-                }
-            }
-
-            pub fn parse_vector<const N: usize>(
-                buf: &mut crate::parse_buffer::ParseBuffer$(<$lt>)?,
-            ) -> Result<heapless::Vec<Self, N>, crate::TlsError> {
-                let extensions_len = buf
-                    .read_u16()
-                    .map_err(|_| crate::TlsError::InvalidExtensionsLength)?;
-
-                let mut ext_buf = buf.slice(extensions_len as usize)?;
-
-                let mut extensions = heapless::Vec::new();
-
-                while !ext_buf.is_empty() {
-                    trace!("Extension buffer: {}", ext_buf.remaining());
-                    match Self::parse(&mut ext_buf) {
-                        Ok(extension) => {
-                            extensions
-                                .push(extension)
-                                .map_err(|_| crate::TlsError::DecodeError)?;
-                        }
-                        Err(crate::TlsError::UnknownExtensionType) => {
-                            // ignore unrecognized extension type
-                        }
-                        Err(err) => return Err(err),
-                    }
-                }
-
-                trace!("Read {} extensions", extensions.len());
-                Ok(extensions)
+        impl< $($lt)? > $crate::parse_encode::Encode for $name< $($lt)? $(, $local)? > {
+            fn encode(self, buf: &mut $crate::buffer::CryptoBuffer) -> Result<(), $crate::TlsError> {
+                buf.with_u16_length(|buf|{
+                    $(
+                        $crate::extensions::extension_group_macro::ExtensionEncode::extension_encode(
+                            self.$field, buf, $crate::extensions::ExtensionType::$ext
+                        )?;
+                    )*
+                    Ok(())
+                })
             }
         }
     };
@@ -153,3 +234,5 @@ macro_rules! extension_group {
 // This re-export makes it possible to omit #[macro_export]
 // https://stackoverflow.com/a/67140319
 pub(crate) use extension_group;
+
+use crate::{TlsError, buffer::CryptoBuffer, extensions::ExtensionType, parse_encode::Encode};

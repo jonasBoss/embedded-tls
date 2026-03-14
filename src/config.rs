@@ -2,6 +2,7 @@ use core::marker::PhantomData;
 
 use crate::TlsError;
 use crate::cipher_suites::CipherSuite;
+use crate::extensions::extension_data::alpn::ProtocolName;
 use crate::extensions::extension_data::signature_algorithms::SignatureScheme;
 use crate::extensions::extension_data::supported_groups::NamedGroup;
 pub use crate::handshake::certificate::{CertificateEntryRef, CertificateRef};
@@ -119,7 +120,7 @@ where
 #[must_use = "TlsConfig does nothing unless consumed"]
 pub struct TlsConfig<'a> {
     pub(crate) server_name: Option<&'a str>,
-    pub(crate) alpn_protocols: Option<&'a [&'a [u8]]>,
+    pub(crate) alpn_protocols: Option<&'a [ProtocolName<'a>]>,
     pub(crate) psk: Option<(&'a [u8], Vec<&'a [u8], 4>)>,
     pub(crate) signature_schemes: Vec<SignatureScheme, 25>,
     pub(crate) named_groups: Vec<NamedGroup, 13>,
@@ -366,7 +367,7 @@ impl<'a> TlsConfig<'a> {
     /// The server will select one of the offered protocols and echo it back
     /// in EncryptedExtensions. This is required for endpoints that multiplex
     /// protocols on a single port (e.g. AWS IoT Core MQTT over port 443).
-    pub fn with_alpn(mut self, protocols: &'a [&'a [u8]]) -> Self {
+    pub fn with_alpn(mut self, protocols: &'a [ProtocolName<'a>]) -> Self {
         self.alpn_protocols = Some(protocols);
         self
     }

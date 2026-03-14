@@ -8,7 +8,7 @@ use typenum::Unsigned;
 
 use crate::TlsError;
 use crate::config::{TlsCipherSuite, TlsConfig};
-use crate::extensions::extension_data::alpn::AlpnProtocolNameList;
+use crate::extensions::extension_data::alpn::ProtocolNameList;
 use crate::extensions::extension_data::key_share::{KeyShareClientHello, KeyShareEntry};
 use crate::extensions::extension_data::pre_shared_key::{
     Binders, PreSharedKeyClientHello, PskIdentity, PskIdentityList,
@@ -23,6 +23,7 @@ use crate::extensions::extension_data::supported_versions::{SupportedVersionsCli
 use crate::extensions::messages::ClientHelloExtension;
 use crate::handshake::{LEGACY_VERSION, Random};
 use crate::key_schedule::{HashOutputSize, WriteKeySchedule};
+use crate::parse_encode::Encode;
 use crate::{CryptoProvider, buffer::CryptoBuffer};
 
 pub struct ClientHello<'config, CipherSuite>
@@ -79,81 +80,72 @@ where
         buf.push(1).map_err(|_| TlsError::EncodeError)?;
         buf.push(0).map_err(|_| TlsError::EncodeError)?;
 
-        // extensions (1+)
-        buf.with_u16_length(|buf| {
+        let mut server_name_iter = self
+            .config
+            .server_name
+            .into_iter()
+            .map(ServerName::hostname);
+
+        let mut psk_identities_iter;
+        let mut psk_binders_iter;
+        let psk = if let Some((_, identities)) = &self.config.psk {
+            psk_identities_iter = identities.iter().map(|&i| PskIdentity::external(i));
+            psk_binders_iter = (0..identities.len())
+                .map(|_| <CipherSuite::Hash as OutputSizeUser>::output_size() as u8);
+
+            Some(PreSharedKeyClientHello {
+                identities: PskIdentityList::new(&mut psk_identities_iter),
+                binders: Binders::placeholders(&mut psk_binders_iter),
+            })
+        } else {
+            None
+        };
+        let mut alp_iter = self.config.alpn_protocols.map(|list| list.iter().copied());
+
+        ClientHelloExtension {
             // Section 4.2.1.  Supported Versions
             // Implementations of this specification MUST send this extension in the
             // ClientHello containing all versions of TLS which they are prepared to
             // negotiate
-            ClientHelloExtension::SupportedVersions(SupportedVersionsClientHello::new(
-                &mut Some(TLS13).into_iter(),
-            ))
-            .encode(buf)?;
-
-            ClientHelloExtension::SignatureAlgorithms(SignatureAlgorithms::new(
+            supported_versions: SupportedVersionsClientHello::new(&mut Some(TLS13).into_iter()),
+            signature_algorithms: SignatureAlgorithms::new(
                 &mut self.config.signature_schemes.iter().copied(),
-            ))
-            .encode(buf)?;
-
-            if let Some(max_fragment_length) = self.config.max_fragment_length {
-                ClientHelloExtension::MaxFragmentLength(max_fragment_length).encode(buf)?;
-            }
-
-            ClientHelloExtension::SupportedGroups(SupportedGroups::new(
-                &mut self.config.named_groups.iter().copied(),
-            ))
-            .encode(buf)?;
-
-            ClientHelloExtension::PskKeyExchangeModes(PskKeyExchangeModes::new(
+            ),
+            max_fragment_length: self.config.max_fragment_length,
+            supported_groups: SupportedGroups::new(&mut self.config.named_groups.iter().copied()),
+            psk_key_exchange_modes: Some(PskKeyExchangeModes::new(
                 &mut Some(PskKeyExchangeMode::PskDheKe).into_iter(),
-            ))
-            .encode(buf)?;
-
-            ClientHelloExtension::KeyShare(KeyShareClientHello::new(
+            )),
+            key_share: KeyShareClientHello::new(
                 &mut Some(KeyShareEntry {
                     group: NamedGroup::Secp256r1,
                     opaque: public_key,
                 })
                 .into_iter(),
-            ))
-            .encode(buf)?;
-
-            if let Some(server_name) = self.config.server_name {
-                ClientHelloExtension::ServerName(ServerNameList::new(
-                    &mut Some(ServerName::hostname(server_name)).into_iter(),
-                ))
-                .encode(buf)?;
-            }
-
-            if let Some(alpn_protocols) = self.config.alpn_protocols {
-                ClientHelloExtension::ApplicationLayerProtocolNegotiation(AlpnProtocolNameList {
-                    protocols: alpn_protocols,
-                })
-                .encode(buf)?;
-            }
-
+            ),
+            server_name: Some(ServerNameList::new(&mut server_name_iter)),
             // Section 4.2
             // When multiple extensions of different types are present, the
             // extensions MAY appear in any order, with the exception of
             // "pre_shared_key" which MUST be the last extension in
             // the ClientHello.
-            if let Some((_, identities)) = &self.config.psk {
-                ClientHelloExtension::PreSharedKey(PreSharedKeyClientHello {
-                    identities: PskIdentityList::new(
-                        &mut identities.iter().map(|&i| PskIdentity::external(i)),
-                    ),
-                    binders: Binders::placeholders(
-                        &mut (0..identities.len())
-                            .map(|_| <CipherSuite::Hash as OutputSizeUser>::output_size() as u8),
-                    ),
-                })
-                .encode(buf)?;
-            }
+            psk,
 
-            Ok(())
-        })?;
-
-        Ok(())
+            signature_algorithms_cert: None,
+            status_request: None,
+            use_srtp: None,
+            heartbeat: None,
+            alp_negotiation: alp_iter.as_mut().map(|iter| ProtocolNameList::new(iter)),
+            signed_cert_timestamp: None,
+            client_cert_type: None,
+            server_cert_type: None,
+            padding: None,
+            early_data: None,
+            cookie: None,
+            certificate_authorities: None,
+            post_handshake_auth: None,
+        }
+        .encode(buf)
     }
 
     pub fn finalize(

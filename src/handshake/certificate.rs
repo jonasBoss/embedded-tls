@@ -2,6 +2,7 @@ use crate::TlsError;
 use crate::buffer::CryptoBuffer;
 use crate::extensions::messages::CertificateExtension;
 use crate::parse_buffer::ParseBuffer;
+use crate::parse_encode::Parse;
 use heapless::Vec;
 
 #[derive(Debug)]
@@ -80,7 +81,7 @@ impl<'a> CertificateEntryRef<'a> {
         let entry = CertificateEntryRef::X509(cert.as_slice());
 
         // Validate extensions
-        CertificateExtension::parse_vector::<2>(buf)?;
+        CertificateExtension::parse(buf)?;
 
         Ok(entry)
     }

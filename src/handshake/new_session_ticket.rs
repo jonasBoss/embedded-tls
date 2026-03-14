@@ -2,6 +2,7 @@ use core::marker::PhantomData;
 
 use crate::extensions::messages::NewSessionTicketExtension;
 use crate::parse_buffer::ParseBuffer;
+use crate::parse_encode::Parse;
 use crate::{TlsError, unused};
 
 #[derive(Debug)]
@@ -25,7 +26,7 @@ impl<'a> NewSessionTicket<'a> {
             .slice(ticket_length as usize)
             .map_err(|_| TlsError::InvalidTicketLength)?;
 
-        let extensions = NewSessionTicketExtension::parse_vector::<1>(buf)?;
+        let extensions = NewSessionTicketExtension::parse(buf)?;
 
         unused((lifetime, age_add, nonce, ticket, extensions));
         Ok(Self { _todo: PhantomData })

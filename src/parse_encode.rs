@@ -246,5 +246,4 @@ macro_rules! parse_encode_list {
     };
 }
 
-use generic_array::{ArrayLength, GenericArray};
 pub(crate) use parse_encode_list;
