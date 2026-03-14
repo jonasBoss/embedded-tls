@@ -2,7 +2,7 @@ use crate::buffer::CryptoBuffer;
 
 use crate::TlsError;
 use crate::parse_buffer::{ParseBuffer, ParseError};
-use crate::parse_encode::{Encode, Parse, parse_encode_list};
+use crate::parse_encode::{Encode, Parse, make_zerocopy_list};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -28,4 +28,9 @@ impl Encode for PskKeyExchangeMode {
     }
 }
 
-parse_encode_list!(PskKeyExchangeModes<'a, Location>(PskKeyExchangeMode), u8);
+make_zerocopy_list! {
+    #[lenght = u8]
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct PskKeyExchangeModes<'a, Location>(PskKeyExchangeMode);
+}

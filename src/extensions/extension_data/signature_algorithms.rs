@@ -2,7 +2,7 @@ use crate::{
     TlsError,
     buffer::CryptoBuffer,
     parse_buffer::{ParseBuffer, ParseError},
-    parse_encode::{Encode, Parse, Remote, parse_encode_list},
+    parse_encode::{Encode, Parse, Remote, make_zerocopy_list},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -143,7 +143,11 @@ impl SignatureScheme {
     }
 }
 
-parse_encode_list!(SignatureAlgorithms<'a, Location>(SignatureScheme), u16);
+make_zerocopy_list! {
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct SignatureAlgorithms<'a, Location>(SignatureScheme);
+}
 
 impl PartialEq for SignatureAlgorithms<'_, Remote> {
     fn eq(&self, other: &Self) -> bool {

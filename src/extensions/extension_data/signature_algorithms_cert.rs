@@ -1,5 +1,9 @@
 use crate::extensions::extension_data::signature_algorithms::SignatureScheme;
 
-use crate::parse_encode::parse_encode_list;
+use crate::parse_encode::make_zerocopy_list;
 
-parse_encode_list!(SignatureAlgorithmsCert<'a, Location>(SignatureScheme));
+make_zerocopy_list! {
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct SignatureAlgorithmsCert<'a, Location>(SignatureScheme);
+}

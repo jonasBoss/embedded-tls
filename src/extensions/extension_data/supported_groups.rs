@@ -2,7 +2,7 @@ use crate::{
     TlsError,
     buffer::CryptoBuffer,
     parse_buffer::{ParseBuffer, ParseError},
-    parse_encode::{Encode, Parse, Remote, parse_encode_list},
+    parse_encode::{Encode, Parse, Remote, make_zerocopy_list},
 };
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -80,7 +80,11 @@ impl Encode for NamedGroup {
     }
 }
 
-parse_encode_list!(SupportedGroups<'a, Location>(NamedGroup));
+make_zerocopy_list! {
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct SupportedGroups<'a, Location>(NamedGroup);
+}
 
 impl PartialEq for SupportedGroups<'_, Remote> {
     fn eq(&self, other: &Self) -> bool {

@@ -2,7 +2,7 @@ use crate::{
     TlsError,
     buffer::CryptoBuffer,
     parse_buffer::ParseBuffer,
-    parse_encode::{Encode, Parse, parse_encode_list},
+    parse_encode::{Encode, Parse, make_zerocopy_list},
 };
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -22,7 +22,12 @@ impl Parse<'_> for ProtocolVersion {
 
 pub const TLS13: ProtocolVersion = ProtocolVersion(0x0304);
 
-parse_encode_list!(SupportedVersionsClientHello<'a, Location>(ProtocolVersion), u8);
+make_zerocopy_list! {
+    #[lenght = u8]
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct SupportedVersionsClientHello<'a, Location>(ProtocolVersion);
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

@@ -3,7 +3,7 @@ use crate::buffer::CryptoBuffer;
 use crate::TlsError;
 use crate::parse_buffer::{ParseBuffer, ParseError};
 use crate::parse_encode::{
-    DynIterList, Encode, Local, Parse, Remote, StorageType, ZerocopyList, parse_encode_list,
+    DynIterList, Encode, Local, Parse, Remote, StorageType, ZerocopyList, make_zerocopy_list,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,7 +41,11 @@ impl Encode for PskIdentity<'_> {
     }
 }
 
-parse_encode_list!(PskIdentityList<'a, Location>(PskIdentity<'a>));
+make_zerocopy_list! {
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct PskIdentityList<'a, Location>(PskIdentity<'a>);
+}
 
 impl PartialEq for PskIdentityList<'_, Remote> {
     fn eq(&self, other: &Self) -> bool {

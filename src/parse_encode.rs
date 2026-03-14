@@ -168,10 +168,28 @@ impl<U: Encode> Clone for DynIterList<'_, U> {
 
 /// create a [`List`] wrapping newtype that encodes its lenght with the given type
 ///
-/// The following `parse_encode_list!(MyListWithU8Length<'a, Location>(u32), u8)` will create a
-/// `pub struct MyListWithU8Length<'a, Location>(List<'a, u32, Location>)` where the size of the list is
-/// encoded as a `u8` for the [`Parse`] and [`Encode`] traits. The lenght is optional, and defaults to `u16`
-macro_rules! parse_encode_list {
+/// The macro:
+/// ``` ignore
+/// # // we cannot doctest private items sadly
+/// parse_encode_list!{
+///     #[derive(Debug, Clone)]
+///     #[lenght = u8] // the lenght attribute defaults to u16
+///     pub struct MyListWithU8Lengh<'a, Location>(u32);
+/// }
+/// ```
+/// will generate the following type:
+/// ```ignore
+/// #[derive(Debug, Clone)]
+/// pub struct MyListWithU8Lenght<'a, Location>(Location::List<u32>)
+/// where Location: StorageType;
+/// ```
+///
+/// The [`Parse`](crate::parse_encode::Parse) and [`Encode`](crate::parse_encode::Encode) traits will be implemented where
+/// the `Location` is [`Remote`](crate::parse_encode::Remote) and [`Local`](crate::parse_encode::Local) respecively.
+///
+/// For the remote type a `pub fn iter(&self) -> impl Iterator<Item = ...>`  and `pub fn len(&self) -> usize` is implemented.
+/// For the local type a `pub fn new(iter: &mut dyn Iterator<Item = ...>) -> Self` is impelmented.
+macro_rules! make_zerocopy_list {
     (@read u8, $buf:ident) => {
         $buf.read_u8()
     };
@@ -191,14 +209,72 @@ macro_rules! parse_encode_list {
     (@encode u32, |$buf:ident| $fn:expr) => {
         $buf.with_u32_length(|$buf| $fn)
     };
-    // as a shorthand this maatch provides the len type as u16
-    ($name:ident<'a, Location>($item:ty)) => {
-        parse_encode_list!($name<'a, Location>($item), u16);
+    (
+        $(#[$($attr:tt)*])*
+        $vis:vis struct $name:ident<'a, Location>($item:ty);
+    ) => {
+        make_zerocopy_list!(
+            @vis $vis,
+            @name $name,
+            @item $item,
+            @attr ,
+            @attr_to_parse $(#[$($attr)*])*
+        );
     };
-    ($name:ident<'a, Location>($item:ty), $len:tt) => {
-        #[derive(Debug, Clone)]
-        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-        pub struct $name<'a, Location>(Location::ListType<'a, $item>)
+    (
+        @vis $vis:vis,
+        @name $name:ident,
+        @item $item:ty,
+        @attr $(#[$attr:meta])*,
+        @attr_to_parse  // we found no lenght attribute
+    ) => {
+        make_zerocopy_list!(
+            @vis $vis,
+            @name $name,
+            @item $item,
+            @len u16, // set the default lenght to u16
+            @attr $(#[$attr])*
+        );
+    };
+    (
+        @vis $vis:vis,
+        @name $name:ident,
+        @item $item:ty,
+        @attr $(#[$attr:meta])*,
+        @attr_to_parse #[lenght=$len:tt] $(#[$attr2:meta])* // we found the lenght attribute
+    ) => {
+        make_zerocopy_list!(
+            @vis $vis,
+            @name $name,
+            @item $item,
+            @len $len,
+            @attr $(#[$attr])* $(#[$attr2])*
+        );
+    };
+    (
+        @vis $vis:vis,
+        @name $name:ident,
+        @item $item:ty,
+        @attr $(#[$attr:meta])*,
+        @attr_to_parse #[$attr2:meta] $($rest:tt)* // just a normal attribute
+    ) => {
+        make_zerocopy_list!(
+            @vis $vis,
+            @name $name,
+            @item $item,
+            @attr $(#[$attr])* #[$attr2],
+            @attr_to_parse $($rest)*
+        );
+    };
+    (
+        @vis $vis:vis,
+        @name $name:ident,
+        @item $item:ty,
+        @len $len:tt,
+        @attr $(#[$attr:meta])*
+    ) => {
+        $(#[$attr])*
+        $vis struct $name<'a, Location>(Location::ListType<'a, $item>)
         where
             Location: $crate::parse_encode::StorageType;
 
@@ -206,7 +282,7 @@ macro_rules! parse_encode_list {
             fn parse(
                 buf: &mut $crate::parse_buffer::ParseBuffer<'a>,
             ) -> Result<Self, $crate::TlsError> {
-                let len = parse_encode_list!(@read $len, buf)? as usize;
+                let len = make_zerocopy_list!(@read $len, buf)? as usize;
                 let mut buf = buf.slice(len)?;
                 <$crate::parse_encode::Remote as $crate::parse_encode::StorageType>::ListType::parse(&mut buf).map(Self)
             }
@@ -214,7 +290,7 @@ macro_rules! parse_encode_list {
 
         impl<'a> $crate::parse_encode::Encode for $name<'a, $crate::parse_encode::Local> {
             fn encode(self, buf: &mut $crate::buffer::CryptoBuffer) -> Result<(), crate::TlsError> {
-                parse_encode_list!(@encode $len, |buf| self.0.encode(buf))
+                make_zerocopy_list!(@encode $len, |buf| self.0.encode(buf))
             }
         }
 
@@ -234,12 +310,11 @@ macro_rules! parse_encode_list {
             pub fn len(&self) -> usize {
                 let mut buf = $crate::parse_buffer::ParseBuffer::new(&self.0.0);
                 core::iter::from_fn(||{
-                    let len = parse_encode_list!(@read $len, buf).ok()? as  usize;
+                    let len = make_zerocopy_list!(@read $len, buf).ok()? as  usize;
                     let _ = buf.slice(len);
                     Some(())
                 }).count()
             }        }
     };
 }
-
-pub(crate) use parse_encode_list;
+pub(crate) use make_zerocopy_list;

@@ -2,7 +2,7 @@ use crate::{
     TlsError,
     buffer::CryptoBuffer,
     parse_buffer::{ParseBuffer, ParseError},
-    parse_encode::{Encode, Parse, parse_encode_list},
+    parse_encode::{Encode, Parse, make_zerocopy_list},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -71,7 +71,11 @@ impl Encode for ServerName<'_> {
     }
 }
 
-parse_encode_list!(ServerNameList<'a, Location>(ServerName<'a>));
+make_zerocopy_list! {
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct ServerNameList<'a, Location>(ServerName<'a>);
+}
 
 // RFC 6066, Section 3.  Server Name Indication
 // A server that receives a client hello containing the "server_name"
